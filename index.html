@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bug Arcade</title>
+<meta name="description" content="Tiny browser games about developer life. A new game every week.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  /* Layout: one narrow arcade column — marquee header, a stack of game cabinets, quiet footer */
+  :root {
+    --bg: #0b0f1a;
+    --surface: #121a2c;
+    --line: #2b3550;
+    --text: #e8ecf5;
+    --muted: #8b93a7;
+    --neon: #39ff88;
+    --pink: #ff3d8b;
+    --yellow: #ffd23f;
+    --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    min-height: 100%;
+    background: var(--bg);
+    background-image:
+      linear-gradient(rgba(57,255,136,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(57,255,136,0.045) 1px, transparent 1px);
+    background-size: 40px 40px;
+    color: var(--text);
+    font-family: var(--display);
+    padding: calc(40px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+  main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px; }
+
+  header { display: flex; flex-direction: column; gap: 12px; }
+  .prompt { font-family: var(--mono); font-size: 13px; color: var(--neon); letter-spacing: 0.5px; }
+  .prompt::after { content: "▍"; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  h1 {
+    font-size: clamp(48px, 12vw, 88px); font-weight: 800; line-height: 0.95; letter-spacing: -2px;
+    text-wrap: balance;
+  }
+  h1 span { color: var(--pink); text-shadow: 0 0 28px rgba(255,61,139,0.55); }
+  .tagline { font-size: 19px; color: var(--muted); max-width: 46ch; line-height: 1.45; }
+
+  .label { font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+  .games { display: flex; flex-direction: column; gap: 16px; }
+
+  .cab {
+    display: grid; grid-template-columns: 200px 1fr; gap: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    color: inherit; text-decoration: none;
+    transition: transform .15s, border-color .15s, box-shadow .15s;
+  }
+  a.cab:hover, a.cab:focus-visible { transform: translateY(-2px); border-color: var(--neon); box-shadow: 0 0 40px rgba(57,255,136,0.18); outline: none; }
+  .screen {
+    position: relative; min-height: 170px;
+    background: radial-gradient(circle at 50% 60%, #1d2a48, #0b0f1a 70%);
+    display: grid; place-items: center; font-size: 46px; letter-spacing: 6px;
+    border-right: 1px solid var(--line);
+  }
+  .screen .clock { position: absolute; top: 10px; left: 12px; font-family: var(--mono); font-size: 13px; color: var(--yellow); letter-spacing: 0; }
+  .screen .cpu { position: absolute; bottom: 12px; left: 12px; right: 12px; height: 6px; border-radius: 3px; background: #1c2438; overflow: hidden; }
+  .screen .cpu i { display: block; height: 100%; width: 78%; background: var(--pink); }
+  .info { padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .info h2 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+  .info p { color: var(--muted); line-height: 1.5; font-size: 15px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tags span { font-family: var(--mono); font-size: 11px; color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+  .play { margin-top: auto; font-family: var(--mono); font-weight: 700; color: var(--neon); font-size: 14px; }
+  .new { color: var(--bg); background: var(--yellow); border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+
+  .soon { border-style: dashed; background: transparent; }
+  .soon .screen { background: transparent; font-size: 40px; color: var(--muted); letter-spacing: 0; }
+  .soon .info h2 { color: var(--muted); }
+
+  footer { font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.7; border-top: 1px solid var(--line); padding-top: 16px; }
+
+  @media (max-width: 560px) {
+    .cab { grid-template-columns: 1fr; }
+    .screen { min-height: 140px; border-right: none; border-bottom: 1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .prompt::after { animation: none; }
+    .cab { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="prompt">$ git checkout games</p>
+    <h1>Bug <span>Arcade</span></h1>
+    <p class="tagline">Tiny browser games about developer life. Play in 90 seconds, no install, works on your phone. A new game every week.</p>
+  </header>
+
+  <section class="games" aria-label="Games">
+    <p class="label">Now playing</p>
+
+    <a class="cab" href="friday-deploy/">
+      <div class="screen" aria-hidden="true">
+        <span class="clock">17:55:00</span>
+        🐛🔒🌀
+        <span class="cpu"><i></i></span>
+      </div>
+      <div class="info">
+        <h2>Friday Deploy <span class="new">NEW</span></h2>
+        <p>Someone deployed to prod at 5:55 PM on a Friday. Squash the bugs, shoo your manager and keep the CPU under 100% until 6:00.</p>
+        <div class="tags"><span>NullPointerException</span><span>Deadlock</span><span>Legacy boss</span><span>90 sec</span></div>
+        <span class="play">▶ Play now</span>
+      </div>
+    </a>
+
+    <div class="cab soon">
+      <div class="screen" aria-hidden="true">?</div>
+      <div class="info">
+        <h2>Next week</h2>
+        <p>Another game about the things that happen to every developer. Follow along so you don't miss it.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built with HTML, Canvas and too much coffee.<br>
+    Every game runs in the browser. Nothing to install.
+  </footer>
+</main>
+</body>
+</html>
