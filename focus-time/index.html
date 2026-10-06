@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Focus Time</title>
+<meta name="description" content="Protect your focus time. Decline every meeting. A 60-second browser game.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #eef1f8;
+    --paper: #ffffff;
+    --ink: #1d1f2b;
+    --muted: #6b7088;
+    --line: #e3e7f1;
+    --gold: #ffc93c;
+    --red: #ff3b5c;
+    --blue: #4f7cff;
+    --green: #17c27a;
+    --font: "Fredoka", "Avenir Next", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: pointer; }
+
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 14px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+    background: var(--paper);
+    border-bottom: 3px solid var(--ink);
+    pointer-events: none;
+  }
+  #hud .box { display: flex; flex-direction: column; line-height: 1.05; }
+  #hud .lbl { font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  #clock { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #score { font-size: 22px; font-weight: 700; color: var(--blue); font-variant-numeric: tabular-nums; }
+  #focusWrap { flex: 1; max-width: 340px; }
+  #focusBar { height: 14px; border-radius: 7px; background: #f1f2f7; border: 2px solid var(--ink); overflow: hidden; margin-top: 2px; }
+  #focusFill { height: 100%; width: 100%; background: var(--gold); transition: background .2s; }
+  #muteBtn {
+    pointer-events: auto; margin-left: auto;
+    background: var(--paper); border: 2px solid var(--ink); color: var(--ink);
+    border-radius: 10px; padding: 5px 10px; font-size: 16px; cursor: pointer;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  #screen {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    background: rgba(29, 31, 43, 0.35);
+    backdrop-filter: blur(2px);
+  }
+  #screen.hidden { display: none; }
+  .card {
+    background: var(--paper);
+    border: 3px solid var(--ink);
+    border-radius: 22px;
+    box-shadow: 6px 6px 0 var(--ink);
+    padding: 26px 24px 22px;
+    max-width: 560px; width: 100%;
+    max-height: calc(100vh - 32px); overflow: auto;
+    text-align: center;
+  }
+  .card h1 { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -1px; }
+  .card h1 span { color: var(--blue); }
+  .card h2 { font-size: 30px; font-weight: 700; margin-bottom: 6px; text-wrap: balance; }
+  .card p { color: var(--muted); margin: 8px 0; line-height: 1.45; font-weight: 500; }
+  .card .story { color: var(--ink); font-size: 17px; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; text-align: left; font-size: 13px; }
+  .legend div { border: 2px solid var(--ink); border-radius: 12px; padding: 7px 9px; line-height: 1.3; font-weight: 500; }
+  .legend b { display: block; font-weight: 700; }
+  .chip { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid var(--ink); margin-right: 5px; vertical-align: 0; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+  .stats div { border: 2px solid var(--ink); border-radius: 12px; padding: 8px; }
+  .stats b { display: block; font-size: 24px; color: var(--blue); }
+  .stats span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .rank { font-size: 24px; font-weight: 700; margin: 4px 0; }
+  .newbest { color: var(--red); font-weight: 700; animation: pulse .6s infinite alternate; }
+  @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+  .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  button.go, button.share {
+    font-family: var(--font); font-weight: 700; font-size: 18px;
+    border: 3px solid var(--ink); border-radius: 14px; padding: 12px 26px; cursor: pointer;
+    box-shadow: 4px 4px 0 var(--ink); transition: transform .08s, box-shadow .08s;
+  }
+  button.go { background: var(--gold); color: var(--ink); }
+  button.share { background: var(--paper); color: var(--ink); }
+  button.go:active, button.share:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+  button:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+  .keys { font-size: 12px; color: var(--muted); margin-top: 12px; }
+  kbd { border: 1.5px solid var(--ink); border-radius: 5px; padding: 0 5px; font-family: inherit; font-weight: 600; }
+  .more { display: inline-block; margin-top: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+  .more:hover { color: var(--ink); }
+
+  @media (max-width: 600px) {
+    #hud { gap: 8px; padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px; }
+    #clock, #score { font-size: 17px; }
+    .card { padding: 18px 14px; }
+    .card h1 { font-size: 34px; }
+    .legend { font-size: 12px; gap: 6px; margin: 12px 0; }
+    .legend div { padding: 6px 7px; }
+    .card p { font-size: 14px; margin: 6px 0; }
+    .card .story { font-size: 15px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .newbest { animation: none; } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="box"><span class="lbl">Time</span><span id="clock">9:00 AM</span></div>
+  <div class="box"><span class="lbl">Score</span><span id="score">0</span></div>
+  <div class="box" id="focusWrap">
+    <span class="lbl">Focus <span id="focusTxt">100%</span></span>
+    <div id="focusBar"><div id="focusFill"></div></div>
+  </div>
+  <button id="muteBtn" title="Sound (M)">🔊</button>
+</div>
+
+<div id="screen"></div>
+
+<script>
+'use strict';
+
+// ---------- Setup ----------
+const cv = document.getElementById('game');
+let ctx = cv.getContext('2d');
+const screenEl = document.getElementById('screen');
+const $clock = document.getElementById('clock');
+const $score = document.getElementById('score');
+const $focusFill = document.getElementById('focusFill');
+const $focusTxt = document.getElementById('focusTxt');
+const $mute = document.getElementById('muteBtn');
+
+const INK = '#1d1f2b';
+const FONT = 'Fredoka, "Avenir Next", system-ui, sans-serif';
+const GAME_LEN = 60;          // 9:00 AM -> 5:00 PM
+const COLS = 5;
+const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+const DATES = (() => {
+  const d = new Date(); const day = (d.getDay() + 6) % 7;
+  const mon = new Date(d); mon.setDate(d.getDate() - day);
+  return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return x.getDate(); });
+})();
+const TODAY = Math.min(4, (new Date().getDay() + 6) % 7);
+
+let W = 0, H = 0, DPR = 1;
+const L = {};
+
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+
+function layout() {
+  L.pad = 12;
+  L.gutter = W < 480 ? 0 : 44;
+  L.left = L.pad + L.gutter;
+  L.right = W - L.pad;
+  L.top = 74;
+  L.head = 34;
+  L.gridTop = L.top + L.head;
+  L.lane = clamp(H * 0.13, 84, 112);
+  L.gridBottom = H - L.lane - L.pad;
+  L.cw = (L.right - L.left) / COLS;
+}
+const colX = c => L.left + L.cw * c + L.cw / 2;
+const colAt = x => clamp(Math.floor((x - L.left) / L.cw), 0, COLS - 1);
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  layout();
+  if (S && S.focus) S.focus.x = colX(S.focus.col);
+}
+addEventListener('resize', resize);
+
+// ---------- Data ----------
+const TYPES = {
+  quick:     { title: 'Quick sync (1 min)',        color: '#4f7cff', ink: '#fff', h: 52,  speed: 150, hp: 1, score: 10, dmg: 10, track: true },
+  meta:      { title: 'Meeting about the meeting', color: '#9b5cff', ink: '#fff', h: 80,  speed: 85,  hp: 1, score: 20, dmg: 12 },
+  email:     { title: "Could've been an email",    color: '#12b5a6', ink: '#fff', h: 66,  speed: 105, hp: 1, score: 30, dmg: 10 },
+  recurring: { title: 'Weekly sync 🔁',            color: '#ff8a3d', ink: '#fff', h: 66,  speed: 95,  hp: 1, score: 25, dmg: 12 },
+  boss:      { title: '1:1 with your boss',        color: '#2b2f4a', ink: '#fff', h: 72,  speed: 70,  hp: 3, score: 60, dmg: 25, track: true },
+  allhands:  { title: 'ALL-HANDS 🎤',              color: '#ff3b5c', ink: '#fff', h: 116, speed: 55,  hp: Infinity, score: 0, dmg: 35, span: 2 },
+  pizza:     { title: 'Lunch & Learn 🍕',          color: '#ffc93c', ink: INK,    h: 66,  speed: 100, hp: 1, score: 0, dmg: -20 },
+};
+
+const DECLINE_LINES = ['Declined ✗', 'Nope.', 'Not today', "I'm heads-down", 'Tentative ➝ No', 'Conflict 🙃', 'Sent regrets'];
+const HIT_LINES = ['Focus interrupted 😩', 'Context switch!', 'There goes your flow…', 'Booked over your focus!', 'Ugh. Camera on? 📷', '"Got 5 minutes?"'];
+const MISS_JOKES = [
+  "You're on mute", 'Wrong meeting link', 'Is this the right Zoom?', 'Can you hear me now?', "Let's circle back",
+  'Sorry, go ahead', 'Per my last email…', "Let's take this offline", 'Who just joined?', 'Can everyone see my screen?',
+];
+const BOSS_LINES = ['Are you sure? 🤨', 'Really sure? 😐'];
+const TOASTS = [
+  ['Teams', "You're on mute", '#5b5fc7'],
+  ['Zoom', 'The host has another meeting in progress', '#2d8cff'],
+  ['Outlook', "New invite: 'Sync about syncing'", '#0f6cbd'],
+  ['Slack', 'Got 5 minutes? Quick call?', '#4a154b'],
+  ['Calendar', 'Reminder: meeting starts in 0 minutes', '#17c27a'],
+  ['Teams', 'Can everyone see my screen?', '#5b5fc7'],
+  ['Outlook', 'Per my last email…', '#0f6cbd'],
+  ['Slack', "Let's take this offline", '#4a154b'],
+  ['Zoom', 'Sorry, I was on mute', '#2d8cff'],
+  ['Boss', "Let's circle back on this", '#2b2f4a'],
+  ['HR', 'Mandatory fun: team building at 4 PM 🎉', '#ff8a3d'],
+  ['Mom', 'Are you working or in meetings again?', '#ff3b5c'],
+  ['Calendar', 'Your focus time conflicts with 3 events', '#17c27a'],
+  ['Teams', 'Someone is presenting a 47-slide deck', '#5b5fc7'],
+];
+const COMBO_LINES = { 5: 'Inbox Zero vibes!', 10: 'Calendar Ninja! 🥷', 15: 'Professional Decliner!', 20: 'Out of Office energy ✈️', 30: 'CEO of Declining 👑' };
+const RANKS = [[0, 'Intern 🐣'], [400, 'Team Player 🤝'], [1000, 'Senior 😎'], [2000, 'Calendar Ninja 🥷'], [3500, 'CEO of Declining 👑']];
+const rankFor = s => RANKS.filter(r => s >= r[0]).pop()[1];
+
+const BEST_KEY = 'focus-time-best';
+function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { return 0; } }
+function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+
+// ---------- Audio ----------
+let AC = null, muted = false;
+function initAudio() {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
+  if (AC && AC.state === 'suspended') AC.resume();
+}
+function tone(f1, f2, dur, type = 'sine', vol = 0.2, delay = 0) {
+  if (!AC || muted) return;
+  const t0 = AC.currentTime + delay;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f1, t0);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t0 + dur);
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g).connect(AC.destination);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function noise(dur, vol = 0.3, freq = 800, delay = 0) {
+  if (!AC || muted) return;
+  const len = Math.floor(AC.sampleRate * dur);
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  src.buffer = buf; f.type = 'lowpass'; f.frequency.value = freq; g.gain.value = vol;
+  src.connect(f).connect(g).connect(AC.destination);
+  src.start(AC.currentTime + delay);
+}
+const sfx = {
+  decline() { noise(0.12, 0.25, 3000); tone(220, 90, 0.12, 'square', 0.07, 0.02); },
+  tap()     { tone(600, 300, 0.07, 'triangle', 0.12); },
+  nope()    { tone(160, 150, 0.09, 'square', 0.07); tone(160, 150, 0.09, 'square', 0.07, 0.12); },
+  email()   { tone(500, 1400, 0.22, 'sine', 0.12); },
+  hit()     { noise(0.25, 0.4, 600); tone(140, 60, 0.3, 'sawtooth', 0.12); },
+  pizza()   { [523, 659, 784].forEach((f, i) => tone(f, f, 0.12, 'triangle', 0.13, i * 0.08)); },
+  power()   { tone(700, 1400, 0.18, 'sine', 0.13); tone(1050, 2100, 0.2, 'sine', 0.09, 0.08); },
+  ooo()     { noise(0.8, 0.45, 1800); tone(300, 1200, 0.6, 'sawtooth', 0.08); },
+  alarm()   { for (let i = 0; i < 3; i++) { tone(880, 880, 0.12, 'square', 0.06, i * 0.26); tone(660, 660, 0.12, 'square', 0.06, i * 0.26 + 0.13); } },
+  toast()   { tone(988, 988, 0.06, 'sine', 0.07); tone(1319, 1319, 0.09, 'sine', 0.07, 0.07); },
+  combo()   { tone(660, 990, 0.1, 'square', 0.06); },
+  win()     { [523, 659, 784, 1046].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.15, i * 0.12)); },
+  lose()    { [[392, 370], [370, 349], [349, 330], [330, 262]].forEach(([a, z], i) => tone(a, z, i === 3 ? 1 : 0.4, 'sawtooth', 0.08, i * 0.45)); },
+};
+function toggleMute() { muted = !muted; $mute.textContent = muted ? '🔇' : '🔊'; }
+$mute.addEventListener('click', e => { e.stopPropagation(); toggleMute(); });
+
+// ---------- State ----------
+let S = null;
+let mode = 'menu'; // menu | play | pause | dying | end
+let best = loadBest();
+const mouse = { x: -100, y: -100, touch: false };
+let drag = null;
+
+function newState() {
+  return {
+    t: 0, score: 0,
+    focus: { col: 2, x: 0, hp: 100, hitT: 0, bump: 0 },
+    meetings: [], parts: [], texts: [], stamps: [], envelopes: [], powers: [], toasts: [], warns: [],
+    booked: [0, 0, 0, 0, 0],
+    bigText: null,
+    spawnT: 0.4, powerT: rand(7, 10), toastT: 3, events: {},
+    shield: 0, dnd: 0,
+    combo: 0, lastKill: -9, bestCombo: 0, declined: 0, emails: 0,
+    shake: 0, flash: 0, overT: 0,
+  };
+}
+
+const fmtTime = mins => {
+  const h = Math.floor(mins / 60), m = Math.floor(mins % 60);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+};
+const clockMins = () => 9 * 60 + Math.min(1, S.t / GAME_LEN) * 480;
+
+function spawnMeeting(type, col, opts = {}) {
+  const T = TYPES[type];
+  const span = T.span || 1;
+  col = col ?? Math.floor(Math.random() * (COLS - span + 1));
+  col = clamp(col, 0, COLS - span);
+  const start = clockMins() + 30 + Math.floor(Math.random() * 6) * 30;
+  const b = {
+    type, T, col, span,
+    x: L.left + L.cw * (col + span / 2),
+    y: opts.y ?? (L.gridTop - T.h - 6),
+    h: T.h, speed: T.speed * rand(0.9, 1.1),
+    hp: T.hp, title: opts.title || T.title,
+    timeLabel: fmtTime(start).replace(' ', '').toLowerCase(),
+    age: 0, phase: rand(0, 6), hitT: 0, wiggle: 0, tracked: false, target: col,
+    series: opts.series || 0, pending: 0,
+  };
+  S.meetings.push(b);
+  return b;
+}
+
+// ---------- Effects ----------
+function addText(x, y, text, color = INK, size = 18, life = 1.1) {
+  S.texts.push({ x, y, text, color, size, life, max: life, vy: -55 });
+}
+function bigText(text, color = INK) { S.bigText = { text, color, life: 1.4 }; }
+function burst(x, y, colors, n = 16, speed = 300, size = 6) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = rand(speed * 0.3, speed);
+    S.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, life: rand(0.5, 1), color: pick(colors), size: rand(size * 0.5, size * 1.3), rot: rand(0, 6), vr: rand(-10, 10) });
+  }
+}
+function shatter(b) {
+  const mw = L.cw * b.span - 8, x0 = b.x - mw / 2;
+  for (let i = 0; i < 14; i++) {
+    S.parts.push({ x: x0 + rand(0, mw), y: b.y + rand(0, b.h), vx: rand(-220, 220), vy: rand(-320, -60), life: rand(0.5, 0.9), color: b.T.color, size: rand(6, 14), rot: rand(0, 6), vr: rand(-12, 12), outline: true });
+  }
+}
+function toast(app, msg, color) {
+  S.toasts.push({ app, msg, color, life: 3.6 });
+  if (S.toasts.length > 2) S.toasts.shift();
+  sfx.toast();
+}
+
+// ---------- Gameplay ----------
+function startGame() {
+  initAudio();
+  S = newState();
+  S.focus.x = colX(S.focus.col);
+  mode = 'play';
+  screenEl.classList.add('hidden');
+  bigText('Protect your focus! Decline everything 🎧', '#4f7cff');
+}
+
+function registerKill() {
+  S.combo = (S.t - S.lastKill < 1.1) ? S.combo + 1 : 1;
+  S.lastKill = S.t;
+  S.bestCombo = Math.max(S.bestCombo, S.combo);
+  if (COMBO_LINES[S.combo]) { bigText(`COMBO x${S.combo}! ${COMBO_LINES[S.combo]}`, '#9b5cff'); sfx.combo(); }
+  return Math.min(5, 1 + Math.floor(S.combo / 4));
+}
+
+function removeMeeting(b) { const i = S.meetings.indexOf(b); if (i >= 0) S.meetings.splice(i, 1); }
+
+function decline(b, opts = {}) {
+  removeMeeting(b);
+  shatter(b);
+  S.stamps.push({ x: b.x, y: b.y + b.h / 2, rot: rand(-0.35, 0.25), life: 0.9 });
+  S.shake = Math.max(S.shake, 5);
+  sfx.decline();
+  if (b.type === 'pizza') {
+    S.score = Math.max(0, S.score - 20); S.combo = 0;
+    addText(b.x, b.y, 'You declined free pizza?! 😭', '#ff3b5c', 17, 1.4);
+    return;
+  }
+  const mult = registerKill();
+  const pts = (b.T.score + (opts.bonus || 0)) * mult;
+  S.score += pts; S.declined++;
+  if (b.type === 'meta') {
+    addText(b.x, b.y - 4, `+${pts}  It multiplied! 😱`, '#9b5cff', 17);
+    const names = ['Pre-meeting', 'Follow-up'];
+    [-1, 1].forEach((d, i) => spawnMeeting('quick', clamp(b.col + d, 0, COLS - 1), { y: b.y, title: names[i] }));
+  } else if (b.type === 'email') {
+    S.emails++;
+    S.envelopes.push({ x: b.x, y: b.y + b.h / 2, sx: b.x, sy: b.y + b.h / 2, t: 0 });
+    sfx.email();
+    addText(b.x, b.y - 4, `+${pts}  Sent as email 📧`, '#12b5a6', 17);
+  } else if (b.type === 'boss') {
+    addText(b.x, b.y - 4, `+${pts}  Boss: "ok." 😶`, INK, 17, 1.4);
+  } else if (opts.label) {
+    addText(b.x, b.y - 4, `+${pts}  ${opts.label}`, b.T.color, 17);
+  } else {
+    addText(b.x, b.y - 4, `+${pts}  ${pick(DECLINE_LINES)}`, b.T.color === '#ffc93c' ? INK : b.T.color, 16);
+  }
+}
+
+function clickMeeting(b) {
+  if (b.type === 'allhands') {
+    b.wiggle = 0.35; sfx.nope();
+    addText(b.x, b.y, pick(["Can't decline 🔒", 'Attendance is mandatory', 'Move your focus! ⬅➡']), '#ff3b5c', 17);
+    return;
+  }
+  if (b.type === 'recurring') {
+    if (b.pending > 0) { b.pending = 0; decline(b, { bonus: 35, label: 'Series deleted 🗑' }); }
+    else { b.pending = 0.3; b.hitT = 0.12; sfx.tap(); }
+    return;
+  }
+  b.hp--; b.hitT = 0.15; sfx.tap();
+  if (b.hp > 0) { b.wiggle = 0.25; addText(b.x, b.y, BOSS_LINES[2 - b.hp] || 'Hmm?', INK, 16, 0.9); return; }
+  decline(b);
+}
+
+function declineOccurrence(b) {
+  decline(b, { label: 'This occurrence ✗' });
+  if (b.series < 2) {
+    const nb = spawnMeeting('recurring', undefined, { series: b.series + 1 });
+    addText(nb.x, L.gridTop + 30, "🔁 It's recurring!", '#ff8a3d', 17, 1.2);
+  }
+}
+
+function hitFocus(b) {
+  const f = S.focus;
+  if (b.type === 'pizza') {
+    f.hp = Math.min(100, f.hp + 20);
+    sfx.pizza();
+    addText(f.x, L.gridBottom - 10, 'Free pizza! +20 focus 🍕', '#e0a400', 18, 1.4);
+    burst(f.x, L.gridBottom + 20, ['#ffc93c', '#ff8a3d', '#17c27a'], 16, 220, 6);
+    return;
+  }
+  if (S.shield > 0) {
+    addText(f.x, L.gridBottom - 10, 'Noise cancelled 🎧', '#4f7cff', 17);
+    shatter(b); sfx.decline(); S.score += 5;
+    return;
+  }
+  f.hp = Math.max(0, f.hp - b.T.dmg);
+  f.hitT = 0.35; f.bump = 10;
+  S.shake = Math.max(S.shake, b.type === 'allhands' ? 26 : 14);
+  S.flash = 0.25; S.combo = 0;
+  sfx.hit();
+  shatter(b);
+  addText(f.x, L.gridBottom - 14, b.type === 'allhands' ? 'Dragged into the all-hands 🥱' : pick(HIT_LINES), '#ff3b5c', 18, 1.3);
+  if (f.hp <= 0) {
+    mode = 'dying'; S.overT = 1.6; S.shake = 30;
+    bigText('FOCUS DESTROYED 💀', '#ff3b5c');
+    sfx.lose();
+  }
+}
+
+function landElsewhere(b, col) {
+  S.booked[col] += b.h * 0.5;
+  if (b.type === 'pizza') addText(b.x, L.gridBottom - 10, 'Someone else ate your pizza 😢', '#e0a400', 15, 1.2);
+  else if (b.type === 'allhands') addText(b.x, L.gridBottom - 10, 'Everyone else is in the all-hands 🥱', '#ff3b5c', 14, 1.2);
+  else if (Math.random() < 0.35) addText(b.x, L.gridBottom - 10, `${DAYS[col]} is booked 😩`, '#6b7088', 13, 1);
+  burst(b.x, L.gridBottom, [b.T.color], 6, 120, 4);
+}
+
+function applyPower(p) {
+  sfx.power();
+  burst(p.x, p.y, ['#4f7cff', '#ffc93c', '#17c27a', '#ff3b5c'], 20, 260, 6);
+  if (p.kind === 'shield') { S.shield = 5; bigText('🎧 NOISE-CANCELLING ON', '#4f7cff'); }
+  else if (p.kind === 'dnd') { S.dnd = 5; bigText('🔴 DO NOT DISTURB', '#ff3b5c'); }
+  else {
+    sfx.ooo(); S.shake = 22; S.flash = 0.35;
+    bigText('✈️ OUT OF OFFICE!', '#17c27a');
+    for (const b of S.meetings.slice()) {
+      removeMeeting(b); shatter(b);
+      if (b.type !== 'pizza') { S.score += 15; S.declined++; }
+    }
+  }
+}
+
+function update(dt) {
+  S.t += dt;
+  S.shake = Math.max(0, S.shake - dt * 60);
+  S.flash = Math.max(0, S.flash - dt);
+  S.shield = Math.max(0, S.shield - dt);
+  S.dnd = Math.max(0, S.dnd - dt);
+  const f = S.focus;
+  f.hitT = Math.max(0, f.hitT - dt);
+  f.bump *= Math.pow(0.001, dt);
+  f.x += (colX(f.col) - f.x) * Math.min(1, dt * 18);
+
+  for (const p of S.parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 900 * dt; p.rot += p.vr * dt; }
+  S.parts = S.parts.filter(p => p.life > 0);
+  for (const t of S.texts) { t.life -= dt; t.y += t.vy * dt; t.vy *= 0.96; }
+  S.texts = S.texts.filter(t => t.life > 0);
+  for (const s of S.stamps) s.life -= dt;
+  S.stamps = S.stamps.filter(s => s.life > 0);
+  for (const e of S.envelopes) e.t += dt * 1.6;
+  S.envelopes = S.envelopes.filter(e => e.t < 1);
+  for (const t of S.toasts) t.life -= dt;
+  S.toasts = S.toasts.filter(t => t.life > 0);
+  if (S.bigText) { S.bigText.life -= dt; if (S.bigText.life <= 0) S.bigText = null; }
+
+  if (mode === 'dying') {
+    S.overT -= dt;
+    if (S.overT <= 0) endGame(false);
+    return;
+  }
+  if (S.t >= GAME_LEN) { endGame(true); return; }
+
+  const k = S.t / GAME_LEN;
+  const ev = S.events;
+  const once = (key, at, fn) => { if (!ev[key] && S.t >= at) { ev[key] = 1; fn(); } };
+  once('lunch', 22.5, () => { bigText('🍕 12:00 · Lunch & Learn!', '#e0a400'); spawnMeeting('pizza', clamp(f.col + pick([-1, 1]), 0, COLS - 1)); });
+  const allHands = at => () => {
+    const col = clamp(f.col - (Math.random() < 0.5 ? 1 : 0), 0, COLS - 2);
+    S.warns.push({ col, t: 1.3 });
+    sfx.alarm();
+    bigText('⚠ ALL-HANDS INCOMING', '#ff3b5c');
+  };
+  once('ah1', 28, allHands());
+  once('ah2', 46, allHands());
+
+  for (const w of S.warns) { w.t -= dt; if (w.t <= 0 && !w.done) { w.done = true; spawnMeeting('allhands', w.col); } }
+  S.warns = S.warns.filter(w => w.t > -0.1);
+
+  S.spawnT -= dt;
+  if (S.spawnT <= 0) {
+    S.spawnT = Math.max(0.5, 1.25 - 0.8 * k) * (S.dnd > 0 ? 1.8 : 1);
+    const w = [['quick', 5], ['email', S.t > 3 ? 2.5 : 0], ['meta', S.t > 7 ? 2 : 0], ['recurring', S.t > 12 ? 1.6 : 0],
+               ['boss', S.t > 17 ? 1.1 : 0], ['pizza', S.t > 30 ? 0.4 : 0]];
+    let r = Math.random() * w.reduce((a, x) => a + x[1], 0);
+    for (const [type, wt] of w) { if ((r -= wt) <= 0) { spawnMeeting(type); break; } }
+  }
+
+  S.powerT -= dt;
+  if (S.powerT <= 0) {
+    S.powerT = rand(9, 13);
+    const kind = pick(S.t > 15 ? ['shield', 'shield', 'dnd', 'dnd', 'ooo'] : ['shield', 'dnd']);
+    S.powers.push({ kind, x: colX(Math.floor(Math.random() * COLS)), y: L.gridTop - 20, t: 0 });
+  }
+  for (const p of S.powers) { p.t += dt; p.y += 75 * dt; }
+  S.powers = S.powers.filter(p => p.y < H + 40);
+
+  S.toastT -= dt;
+  if (S.toastT <= 0) { S.toastT = rand(5, 8); const [a, m, c] = pick(TOASTS); toast(a, m, c); }
+
+  const speedMul = (1 + 0.65 * k) * (S.dnd > 0 ? 0.45 : 1);
+  for (const b of S.meetings.slice()) {
+    b.age += dt; b.hitT = Math.max(0, b.hitT - dt); b.wiggle = Math.max(0, b.wiggle - dt);
+    if (b.type === 'recurring' && b.pending > 0) { b.pending -= dt; if (b.pending <= 0) { declineOccurrence(b); continue; } }
+    if (b.T.track && !b.tracked && b.y > L.gridTop + (L.gridBottom - L.gridTop) * 0.28) {
+      b.tracked = true; b.target = f.col;
+      if (b.type === 'boss' && b.target !== b.col) addText(b.x, b.y, 'Boss found your free slot 👀', INK, 14, 1.2);
+    }
+    if (b.tracked) {
+      const tx = L.left + L.cw * (b.target + b.span / 2);
+      b.x += (tx - b.x) * Math.min(1, dt * 3.5);
+      b.col = colAt(b.x);
+    }
+    b.y += b.speed * speedMul * dt;
+    if (b.y + b.h >= L.gridBottom + 4) {
+      removeMeeting(b);
+      const left = b.span === 2 ? clamp(Math.round((b.x - L.left) / L.cw) - 1, 0, COLS - 2) : colAt(b.x);
+      const hits = f.col >= left && f.col < left + b.span;
+      if (hits) hitFocus(b); else landElsewhere(b, left);
+    }
+  }
+}
+
+function endGame(won) {
+  mode = 'end';
+  let bonus = 0;
+  if (won) { bonus = Math.round(S.focus.hp * 5); S.score += bonus; sfx.win(); }
+  const isBest = S.score > best;
+  if (isBest) { best = S.score; saveBest(best); }
+  const title = won ? 'You protected your focus! ✅' : 'Your calendar is now 100% meetings 💀';
+  const sub = won
+    ? pick(['You wrote 3 lines of code today. A new record 🎉', 'Deep work achieved. Nobody noticed. Perfect.',
+            'You had one free hour. You spent it answering email.', 'Your manager scheduled a meeting about your focus time.'])
+    : pick(['Your next free slot is in 2027.', "You've been invited to 4 more meetings to discuss this.",
+            'Focus time moved to Saturday 🙃', 'Your status is now permanently "In a meeting".']);
+  screenEl.innerHTML = `
+    <div class="card">
+      <h2>${title}</h2>
+      <p class="story">${sub}</p>
+      <div class="rank">${rankFor(S.score)}</div>
+      ${isBest ? '<p class="newbest">🏆 NEW HIGH SCORE!</p>' : ''}
+      <div class="stats">
+        <div><b>${S.score}</b><span>Score</span></div>
+        <div><b>${S.declined}</b><span>Declined</span></div>
+        <div><b>x${S.bestCombo}</b><span>Best combo</span></div>
+      </div>
+      ${won ? `<p>Focus left bonus: +${bonus}</p>` : ''}
+      <p>${S.emails} meetings turned into emails 📧 · High score: <b>${best}</b></p>
+      <div class="btns">
+        <button class="share" id="shareBtn">Share score 📤</button>
+        <button class="go" id="goBtn">${won ? 'Next week 🔁' : 'Reschedule 🔁'}</button>
+      </div>
+      <p class="keys">or press <kbd>Enter</kbd></p>
+    </div>`;
+  screenEl.classList.remove('hidden');
+  document.getElementById('goBtn').addEventListener('click', startGame);
+  document.getElementById('shareBtn').addEventListener('click', () => shareScore(won));
+}
+
+function showMenu() {
+  mode = 'menu';
+  const sw = c => `<span class="chip" style="background:${c}"></span>`;
+  screenEl.innerHTML = `
+    <div class="card">
+      <h1>Focus <span>Time</span> 🎧</h1>
+      <p class="story">It's Monday, <b>9:00 AM</b>. You blocked 2 hours for deep work.
+      Your coworkers have other plans. Survive until <b>5:00 PM</b>.</p>
+      <div class="legend">
+        <div><b>${sw('#4f7cff')}Quick sync</b>Never 1 minute. Chases your focus</div>
+        <div><b>${sw('#9b5cff')}Meeting about the meeting</b>Decline it and it multiplies</div>
+        <div><b>${sw('#12b5a6')}Could've been an email</b>Turns into an email. Bonus!</div>
+        <div><b>${sw('#ff8a3d')}Weekly sync 🔁</b>Keeps coming back. Double-tap to delete the series</div>
+        <div><b>${sw('#2b2f4a')}1:1 with your boss</b>3 taps. "Are you sure?"</div>
+        <div><b>${sw('#ff3b5c')}ALL-HANDS</b>Can't decline. Move your focus out of the way!</div>
+        <div><b>${sw('#ffc93c')}Lunch & Learn 🍕</b>Let it hit you. Free pizza heals</div>
+        <div><b>🎧 🔴 ✈️ Power-ups</b>Noise-cancelling, Do Not Disturb, Out of Office</div>
+      </div>
+      <p>Tap meetings to decline. Drag your focus block (or use ← →) to dodge.</p>
+      ${best ? `<p>High score: <b>${best}</b> (${rankFor(best)})</p>` : ''}
+      <div class="btns"><button class="go" id="goBtn">Block focus time 🎧</button></div>
+      <p class="keys"><kbd>←</kbd> <kbd>→</kbd> move · <kbd>P</kbd> pause · <kbd>M</kbd> sound · <kbd>Enter</kbd> start</p>
+      <a class="more" href="../">← More games at Bug Arcade</a>
+    </div>`;
+  screenEl.classList.remove('hidden');
+  document.getElementById('goBtn').addEventListener('click', startGame);
+}
+
+function setPause(on) {
+  if (on && mode === 'play') {
+    mode = 'pause';
+    screenEl.innerHTML = `<div class="card"><h2>⏸ Paused</h2><p>Status: Away. Your calendar is waiting… impatiently.</p>
+      <div class="btns"><button class="go" id="goBtn">Resume</button></div><p class="keys">or press <kbd>P</kbd></p></div>`;
+    screenEl.classList.remove('hidden');
+    document.getElementById('goBtn').addEventListener('click', () => setPause(false));
+  } else if (!on && mode === 'pause') {
+    mode = 'play';
+    screenEl.classList.add('hidden');
+  }
+}
+
+// ---------- Share ----------
+const GAME_URL = location.origin + location.pathname;
+
+function makeShareCard(won) {
+  const c = document.createElement('canvas');
+  c.width = 1080; c.height = 1920;
+  const g = c.getContext('2d');
+  g.fillStyle = '#eef1f8'; g.fillRect(0, 0, 1080, 1920);
+  g.strokeStyle = '#e3e7f1'; g.lineWidth = 3;
+  for (let x = 0; x < 1080; x += 216) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 1920); g.stroke(); }
+  for (let y = 0; y < 1920; y += 120) { g.beginPath(); g.moveTo(0, y); g.lineTo(1080, y); g.stroke(); }
+  const card = (x, y, w, h, color, text, ink = '#fff', rot = 0) => {
+    g.save(); g.translate(x + w / 2, y + h / 2); g.rotate(rot); g.translate(-w / 2, -h / 2);
+    g.fillStyle = 'rgba(29,31,43,0.2)'; rr(g, 8, 10, w, h, 26); g.fill();
+    g.fillStyle = color; rr(g, 0, 0, w, h, 26); g.fill();
+    g.lineWidth = 7; g.strokeStyle = INK; g.stroke();
+    g.fillStyle = ink; g.font = `700 48px ${FONT}`; g.textAlign = 'left'; g.fillText(text, 34, h / 2 + 16);
+    g.restore();
+  };
+  card(90, 1180, 520, 130, '#4f7cff', 'Quick sync', '#fff', -0.08);
+  card(470, 1330, 540, 130, '#9b5cff', 'Meeting about…', '#fff', 0.06);
+  card(120, 1490, 600, 130, '#12b5a6', "Could've been an email", '#fff', -0.03);
+  g.save(); g.translate(540, 1395); g.rotate(-0.2);
+  g.strokeStyle = '#ff3b5c'; g.lineWidth = 12; rr(g, -330, -85, 660, 170, 22); g.stroke();
+  g.fillStyle = '#ff3b5c'; g.font = `700 120px ${FONT}`; g.textAlign = 'center'; g.fillText('DECLINED', 0, 42);
+  g.restore();
+
+  g.textAlign = 'center';
+  g.fillStyle = INK; g.font = `700 120px ${FONT}`; g.fillText('FOCUS TIME 🎧', 540, 250);
+  g.fillStyle = won ? '#17c27a' : '#ff3b5c'; g.font = `700 60px ${FONT}`;
+  g.fillText(won ? 'I protected my focus ✅' : 'My calendar won 💀', 540, 350);
+  g.fillStyle = '#6b7088'; g.font = `600 42px ${FONT}`; g.fillText('SCORE', 540, 540);
+  g.fillStyle = '#4f7cff'; g.font = `700 250px ${FONT}`; g.fillText(String(S.score), 540, 770);
+  g.fillStyle = INK; g.font = `700 76px ${FONT}`; g.fillText(rankFor(S.score), 540, 900);
+  g.font = `600 46px ${FONT}`; g.fillStyle = '#6b7088';
+  g.fillText(`${S.declined} meetings declined · ${S.emails} became emails`, 540, 1000);
+  g.fillStyle = INK; g.font = `700 74px ${FONT}`; g.fillText('Can you protect yours? 😏', 540, 1780);
+  g.fillStyle = '#6b7088'; g.font = `600 38px ${FONT}`;
+  g.fillText(GAME_URL.replace(/^https?:\/\//, ''), 540, 1850);
+  return new Promise(res => c.toBlob(res, 'image/png'));
+}
+
+async function shareScore(won) {
+  const btn = document.getElementById('shareBtn');
+  const text = won
+    ? `I protected my focus time in Focus Time 🎧 ${S.score} pts (${rankFor(S.score)}). Can you?`
+    : `My calendar won in Focus Time 💀 ${S.score} pts. Can you protect yours?`;
+  let blob = null;
+  try {
+    blob = await makeShareCard(won);
+    const file = new File([blob], 'focus-time-score.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: `${text} ${GAME_URL}` }); return; }
+    if (navigator.share) { await navigator.share({ text, url: GAME_URL }); return; }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+  }
+  try { await navigator.clipboard.writeText(`${text} ${GAME_URL}`); btn.textContent = 'Copied ✓ + image saved'; }
+  catch (e) { btn.textContent = 'Image saved ✓'; }
+  if (blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'focus-time-score.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+}
+
+// ---------- Input ----------
+function getPos(e) { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function moveFocus(col) { if (S && S.focus.col !== col) { S.focus.col = clamp(col, 0, COLS - 1); } }
+
+cv.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  initAudio();
+  const p = getPos(e);
+  mouse.x = p.x; mouse.y = p.y; mouse.touch = e.pointerType === 'touch';
+  if (mode !== 'play') return;
+  const pad = mouse.touch ? 10 : 4;
+
+  if (p.y > L.gridBottom) { moveFocus(colAt(p.x)); drag = { id: e.pointerId }; return; }
+
+  for (let i = 0; i < S.powers.length; i++) {
+    const pw = S.powers[i];
+    if (dist(p.x, p.y, pw.dx ?? pw.x, pw.y) < 36) { S.powers.splice(i, 1); applyPower(pw); return; }
+  }
+  for (let i = S.meetings.length - 1; i >= 0; i--) {
+    const b = S.meetings[i], mw = L.cw * b.span - 8;
+    if (p.x > b.x - mw / 2 - pad && p.x < b.x + mw / 2 + pad && p.y > b.y - pad && p.y < b.y + b.h + pad) { clickMeeting(b); return; }
+  }
+  S.combo = 0;
+  addText(p.x, p.y, pick(MISS_JOKES), '#6b7088', 14, 1);
+});
+cv.addEventListener('pointermove', e => {
+  const p = getPos(e); mouse.x = p.x; mouse.y = p.y;
+  if (drag && drag.id === e.pointerId && mode === 'play') moveFocus(colAt(p.x));
+});
+const endDrag = e => { if (drag && drag.id === e.pointerId) drag = null; };
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+
+addEventListener('keydown', e => {
+  if (e.key === 'm' || e.key === 'M') toggleMute();
+  else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') setPause(mode === 'play');
+  else if (e.key === 'Enter' && (mode === 'menu' || mode === 'end')) startGame();
+  else if (mode === 'play' && (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A')) moveFocus(S.focus.col - 1);
+  else if (mode === 'play' && (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D')) moveFocus(S.focus.col + 1);
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
+
+// ---------- Drawing ----------
+function rr(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+const roundRect = (x, y, w, h, r) => rr(ctx, x, y, w, h, r);
+
+function wrapLines(text, maxW) {
+  const words = text.split(' '), lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawCalendar(t, k) {
+  ctx.fillStyle = '#eef1f8'; ctx.fillRect(0, 0, W, H);
+  // paper
+  ctx.fillStyle = '#ffffff';
+  roundRect(L.pad - 2 + (L.gutter ? 0 : 0), L.top - 4, W - L.pad * 2 + 4, H - L.top - L.pad + 4, 16); ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+
+  // today column tint + booked hatching
+  for (let c = 0; c < COLS; c++) {
+    const x = L.left + L.cw * c;
+    if (c === TODAY) { ctx.fillStyle = 'rgba(79,124,255,0.06)'; ctx.fillRect(x, L.gridTop, L.cw, L.gridBottom - L.gridTop); }
+    const bh = Math.min(S ? S.booked[c] : 0, (L.gridBottom - L.gridTop) * 0.92);
+    if (bh > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x + 2, L.gridBottom - bh, L.cw - 4, bh); ctx.clip();
+      ctx.fillStyle = 'rgba(255,59,92,0.07)'; ctx.fillRect(x, L.gridBottom - bh, L.cw, bh);
+      ctx.strokeStyle = 'rgba(255,59,92,0.18)'; ctx.lineWidth = 2;
+      for (let i = -bh; i < L.cw + bh; i += 12) { ctx.beginPath(); ctx.moveTo(x + i, L.gridBottom); ctx.lineTo(x + i + bh, L.gridBottom - bh); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+  // hour lines
+  ctx.strokeStyle = '#e3e7f1'; ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#6b7088'; ctx.font = `600 10px ${FONT}`; ctx.textAlign = 'right';
+  for (let h = 0; h <= 8; h++) {
+    const y = L.gridTop + (L.gridBottom - L.gridTop) * h / 8;
+    ctx.beginPath(); ctx.moveTo(L.left, y); ctx.lineTo(L.right, y); ctx.stroke();
+    if (L.gutter) ctx.fillText(fmtTime((9 + h) * 60).replace(':00', ''), L.left - 6, y + 4);
+  }
+  // column lines
+  for (let c = 1; c < COLS; c++) {
+    const x = L.left + L.cw * c;
+    ctx.beginPath(); ctx.moveTo(x, L.top + 6); ctx.lineTo(x, L.gridBottom); ctx.stroke();
+  }
+  // day headers
+  ctx.textAlign = 'center';
+  for (let c = 0; c < COLS; c++) {
+    const x = colX(c);
+    ctx.fillStyle = c === TODAY ? '#4f7cff' : '#6b7088';
+    ctx.font = `700 ${clamp(L.cw / 6, 10, 13)}px ${FONT}`;
+    ctx.fillText(`${DAYS[c]} ${DATES[c]}`, x, L.top + 21);
+  }
+  ctx.strokeStyle = INK; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(L.left - L.gutter, L.gridTop); ctx.lineTo(L.right, L.gridTop); ctx.stroke();
+
+  // "now" line
+  if (S && (mode === 'play' || mode === 'dying' || mode === 'pause')) {
+    const y = L.gridTop + (L.gridBottom - L.gridTop) * k;
+    ctx.strokeStyle = '#ff3b5c'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(L.left, y); ctx.lineTo(L.right, y); ctx.stroke();
+    ctx.fillStyle = '#ff3b5c'; ctx.beginPath(); ctx.arc(L.left, y, 5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // focus lane
+  ctx.fillStyle = '#f6f7fb';
+  ctx.fillRect(L.left - L.gutter + 1, L.gridBottom, W - L.pad * 2 - 2, H - L.pad - L.gridBottom - 1);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(L.left - L.gutter, L.gridBottom); ctx.lineTo(L.right, L.gridBottom); ctx.stroke();
+  ctx.setLineDash([5, 6]); ctx.strokeStyle = '#d5dae8'; ctx.lineWidth = 1.5;
+  for (let c = 1; c < COLS; c++) { const x = L.left + L.cw * c; ctx.beginPath(); ctx.moveTo(x, L.gridBottom + 6); ctx.lineTo(x, H - L.pad - 6); ctx.stroke(); }
+  ctx.setLineDash([]);
+  if (L.gutter) {
+    ctx.save(); ctx.translate(L.left - 22, (L.gridBottom + H - L.pad) / 2); ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = '#6b7088'; ctx.font = `700 10px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('YOU', 0, 4); ctx.restore();
+  }
+}
+
+function drawMeeting(b) {
+  const T = b.T, mw = L.cw * b.span - 8, x = b.x - mw / 2, y = b.y, h = b.h;
+  const s = Math.min(1, b.age / 0.18);
+  ctx.save();
+  ctx.translate(b.x, y + h / 2);
+  ctx.rotate(Math.sin(b.age * 3 + b.phase) * 0.02 + (b.wiggle > 0 ? Math.sin(b.wiggle * 70) * 0.07 : 0));
+  ctx.scale(0.6 + 0.4 * s, 0.6 + 0.4 * s);
+  ctx.translate(-b.x, -(y + h / 2));
+  ctx.fillStyle = 'rgba(29,31,43,0.16)'; roundRect(x + 3, y + 4, mw, h, 10); ctx.fill();
+  ctx.fillStyle = b.hitT > 0 ? '#ffffff' : T.color; roundRect(x, y, mw, h, 10); ctx.fill();
+  if (b.type === 'allhands') {
+    ctx.save(); roundRect(x, y, mw, h, 10); ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 12;
+    for (let i = -h; i < mw; i += 28) { ctx.beginPath(); ctx.moveTo(x + i + (b.age * 30 % 28), y + h); ctx.lineTo(x + i + h + (b.age * 30 % 28), y); ctx.stroke(); }
+    ctx.restore();
+  }
+  roundRect(x, y, mw, h, 10);
+  ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+
+  const fs = clamp(Math.floor(L.cw / 7.4), 10, 15);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = b.hitT > 0 ? INK : T.ink;
+  ctx.globalAlpha = 0.8; ctx.font = `600 ${fs - 2}px ${FONT}`;
+  ctx.fillText(b.timeLabel, x + 7, y + fs + 2);
+  ctx.globalAlpha = 1; ctx.font = `700 ${fs}px ${FONT}`;
+  const maxLines = Math.max(1, Math.floor((h - fs - 10) / (fs + 2)));
+  const lines = wrapLines(b.title, mw - 12);
+  const shown = lines.slice(0, maxLines);
+  if (lines.length > maxLines) shown[maxLines - 1] = shown[maxLines - 1].replace(/\s*\S*$/, '…');
+  shown.forEach((ln, i) => ctx.fillText(ln, x + 7, y + fs * 2 + 6 + i * (fs + 2)));
+  if (b.type === 'boss' && b.hp < 3) {
+    for (let i = 0; i < 3; i++) { ctx.fillStyle = i < 3 - b.hp ? '#ff3b5c' : 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(x + mw - 10 - i * 10, y + 10, 3.5, 0, Math.PI * 2); ctx.fill(); }
+  }
+  if (b.type === 'recurring' && b.series) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = `700 ${fs - 2}px ${FONT}`; ctx.textAlign = 'right';
+    ctx.fillText(`#${b.series + 1}`, x + mw - 6, y + fs + 2);
+  }
+  ctx.restore();
+}
+
+function drawFocus() {
+  const f = S.focus, w = L.cw - 8, h = L.lane - 18;
+  const x = f.x - w / 2, y = L.gridBottom + 9 + f.bump * Math.sin(S.t * 60);
+  ctx.save();
+  if (S.shield > 0) {
+    ctx.strokeStyle = `rgba(79,124,255,${0.5 + 0.3 * Math.sin(S.t * 12)})`; ctx.lineWidth = 4;
+    roundRect(x - 7, y - 7, w + 14, h + 14, 16); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(29,31,43,0.18)'; roundRect(x + 3, y + 4, w, h, 12); ctx.fill();
+  const gr = ctx.createLinearGradient(0, y, 0, y + h);
+  gr.addColorStop(0, '#ffe07a'); gr.addColorStop(1, '#ffb627');
+  ctx.fillStyle = gr; roundRect(x, y, w, h, 12); ctx.fill();
+  if (f.hitT > 0) { ctx.fillStyle = `rgba(255,59,92,${f.hitT * 1.6})`; roundRect(x, y, w, h, 12); ctx.fill(); }
+  ctx.lineWidth = 3; ctx.strokeStyle = INK; roundRect(x, y, w, h, 12); ctx.stroke();
+  const face = f.hp > 70 ? '😌' : f.hp > 40 ? '😐' : f.hp > 15 ? '😫' : '🥵';
+  const es = Math.min(h * 0.46, w * 0.42);
+  ctx.textAlign = 'center'; ctx.font = `${es}px system-ui, "Apple Color Emoji", sans-serif`;
+  ctx.fillText(S.shield > 0 ? '🎧' : face, f.x, y + es + 4);
+  ctx.fillStyle = INK; ctx.font = `700 ${clamp(w / 7.5, 9, 13)}px ${FONT}`;
+  ctx.fillText('DEEP WORK', f.x, y + h - 9);
+  if (mode === 'play' && S.t < 6) {
+    ctx.fillStyle = '#6b7088'; ctx.font = `700 16px ${FONT}`;
+    ctx.fillText('‹', x - 8, y + h / 2 + 5); ctx.fillText('›', x + w + 8, y + h / 2 + 5);
+  }
+  ctx.restore();
+}
+
+function drawStamp(s) {
+  const p = 1 - s.life / 0.9;
+  const sc = p < 0.15 ? 1.8 - p / 0.15 * 0.8 : 1;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, s.life * 2.5);
+  ctx.translate(s.x, s.y); ctx.rotate(s.rot); ctx.scale(sc, sc);
+  const fs = clamp(L.cw / 5.5, 12, 22);
+  ctx.font = `700 ${fs}px ${FONT}`; ctx.textAlign = 'center';
+  const tw = ctx.measureText('DECLINED').width + 14;
+  ctx.strokeStyle = '#ff3b5c'; ctx.lineWidth = 3;
+  roundRect(-tw / 2, -fs * 0.8, tw, fs * 1.5, 6); ctx.stroke();
+  ctx.fillStyle = '#ff3b5c'; ctx.fillText('DECLINED', 0, fs * 0.32);
+  ctx.restore();
+}
+
+function drawPower(p) {
+  const icon = { shield: '🎧', dnd: '🔴', ooo: '✈️' }[p.kind];
+  const label = { shield: 'Noise-cancel', dnd: 'Do Not Disturb', ooo: 'Out of Office' }[p.kind];
+  const x = p.x + Math.sin(p.t * 3) * 10, y = p.y;
+  p.dx = x;
+  ctx.save();
+  ctx.shadowColor = '#ffc93c'; ctx.shadowBlur = 18 + 8 * Math.sin(p.t * 8);
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+  ctx.textAlign = 'center'; ctx.font = `24px system-ui, "Apple Color Emoji", sans-serif`; ctx.fillText(icon, x, y + 8);
+  ctx.fillStyle = INK; ctx.font = `700 10px ${FONT}`; ctx.fillText(label, x, y + 38);
+  ctx.restore();
+}
+
+function drawEnvelope(e) {
+  const tx = W - 40, ty = 30, k = e.t, ease = k * k;
+  const x = e.sx + (tx - e.sx) * ease, y = e.sy + (ty - e.sy) * ease - Math.sin(k * Math.PI) * 80;
+  ctx.save(); ctx.globalAlpha = 1 - Math.max(0, k - 0.8) * 5;
+  ctx.font = `${28 - k * 10}px system-ui, "Apple Color Emoji", sans-serif`; ctx.textAlign = 'center';
+  ctx.fillText('📧', x, y); ctx.restore();
+}
+
+function drawToasts() {
+  const narrow = W < 520, w = narrow ? W - 40 : Math.min(300, W - 24), h = narrow ? 30 : 50;
+  const list = narrow ? S.toasts.slice(-1) : S.toasts;
+  list.forEach((t, i) => {
+    const x = (narrow ? 20 : W - w - 12) + (t.life > 3.35 ? (t.life - 3.35) * 1400 : 0);
+    const y = narrow ? L.gridTop - h - 2 + 0 : L.gridTop + 8 + i * 58;
+    ctx.save(); ctx.globalAlpha = Math.min(1, t.life * 2) * (narrow ? 0.96 : 1);
+    ctx.fillStyle = '#ffffff'; roundRect(x, y, w, h, 10); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = t.color; roundRect(x + 7, y + 7, 5, h - 14, 2.5); ctx.fill();
+    ctx.textAlign = 'left';
+    if (narrow) {
+      ctx.font = `700 12px ${FONT}`; ctx.fillStyle = t.color;
+      const app = t.app + ' · '; ctx.fillText(app, x + 19, y + 19);
+      const aw = ctx.measureText(app).width;
+      ctx.fillStyle = INK; ctx.font = `600 12px ${FONT}`;
+      let m = t.msg; while (ctx.measureText(m).width > w - 30 - aw && m.length > 4) m = m.slice(0, -2);
+      ctx.fillText(m === t.msg ? m : m + '…', x + 19 + aw, y + 19);
+    } else {
+      ctx.fillStyle = t.color; ctx.font = `700 12px ${FONT}`; ctx.fillText(t.app, x + 20, y + 21);
+      ctx.fillStyle = INK; ctx.font = `600 13px ${FONT}`;
+      let m = t.msg; while (ctx.measureText(m).width > w - 32 && m.length > 4) m = m.slice(0, -2);
+      ctx.fillText(m === t.msg ? m : m + '…', x + 20, y + 39);
+    }
+    ctx.restore();
+  });
+}
+
+function drawWarns() {
+  for (const w of S.warns) {
+    if (w.done) continue;
+    const x = L.left + L.cw * w.col, blink = Math.sin(S.t * 18) > 0;
+    ctx.fillStyle = `rgba(255,59,92,${blink ? 0.16 : 0.07})`;
+    ctx.fillRect(x, L.gridTop, L.cw * 2, L.gridBottom - L.gridTop);
+    ctx.fillStyle = '#ff3b5c'; ctx.font = `700 ${clamp(L.cw / 5, 11, 16)}px ${FONT}`; ctx.textAlign = 'center';
+    ctx.fillText('⚠ ALL-HANDS', x + L.cw, L.gridTop + 26);
+    ctx.font = `700 26px ${FONT}`; ctx.fillText('⬇', x + L.cw, L.gridTop + 56);
+  }
+}
+
+function drawOverlay() {
+  for (const p of S.parts) {
+    ctx.save(); ctx.globalAlpha = Math.min(1, p.life * 2);
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+    if (p.outline) { ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.strokeRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7); }
+    ctx.restore();
+  }
+  for (const s of S.stamps) drawStamp(s);
+  for (const e of S.envelopes) drawEnvelope(e);
+  ctx.textAlign = 'center';
+  for (const t of S.texts) {
+    ctx.globalAlpha = Math.min(1, t.life / t.max * 2.5);
+    ctx.font = `700 ${t.size}px ${FONT}`;
+    ctx.lineWidth = 5; ctx.strokeStyle = '#ffffff'; ctx.lineJoin = 'round';
+    ctx.strokeText(t.text, t.x, t.y);
+    ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y);
+  }
+  ctx.globalAlpha = 1;
+  drawToasts();
+  if (S.bigText) {
+    const bt = S.bigText, p = 1 - bt.life / 1.4;
+    const sc = p < 0.12 ? 0.4 + p / 0.12 * 0.75 : 1.15 - Math.min(0.15, (p - 0.12));
+    ctx.save();
+    ctx.translate(W / 2, L.gridTop + (L.gridBottom - L.gridTop) * 0.36);
+    ctx.font = `700 ${clamp(W / 15, 22, 40)}px ${FONT}`;
+    const fit = Math.min(1, (W - 32) / (ctx.measureText(bt.text).width * 1.2));
+    ctx.scale(sc * fit, sc * fit); ctx.rotate(Math.sin(p * 18) * 0.025);
+    ctx.globalAlpha = Math.min(1, bt.life * 2.5);
+    ctx.lineWidth = 10; ctx.strokeStyle = '#ffffff'; ctx.lineJoin = 'round';
+    ctx.strokeText(bt.text, 0, 0);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.strokeText(bt.text, 0, 0);
+    ctx.fillStyle = bt.color; ctx.fillText(bt.text, 0, 0);
+    ctx.restore();
+  }
+  const chips = [];
+  if (S.shield > 0) chips.push(`🎧 ${S.shield.toFixed(1)}s`);
+  if (S.dnd > 0) chips.push(`🔴 DND ${S.dnd.toFixed(1)}s`);
+  if (chips.length) {
+    ctx.font = `700 13px ${FONT}`; ctx.textAlign = 'left';
+    const txt = chips.join('   '), tw = ctx.measureText(txt).width + 18;
+    ctx.fillStyle = '#ffffff'; roundRect(L.left, L.gridBottom - 30, tw, 24, 12); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = INK; ctx.fillText(txt, L.left + 9, L.gridBottom - 13);
+  }
+  if (S.flash > 0) { ctx.fillStyle = `rgba(255,59,92,${S.flash * 0.5})`; ctx.fillRect(0, 0, W, H); }
+}
+
+function updateHud() {
+  $clock.textContent = fmtTime(clockMins());
+  $score.textContent = S.score;
+  const hp = Math.round(S.focus.hp);
+  $focusFill.style.width = hp + '%';
+  $focusFill.style.background = hp > 50 ? '#ffc93c' : hp > 25 ? '#ff8a3d' : '#ff3b5c';
+  $focusTxt.textContent = hp + '%';
+}
+
+// ---------- Menu background: meetings drifting down ----------
+let menuT = 0;
+function menuFrame(dt, t) {
+  if (!S) { S = newState(); S.focus.x = colX(2); }
+  drawCalendar(t, 0);
+  menuT -= dt;
+  if (menuT <= 0 && S.meetings.length < 8) { menuT = 0.7; spawnMeeting(pick(['quick', 'meta', 'email', 'recurring', 'boss'])); }
+  for (const b of S.meetings.slice()) {
+    b.age += dt; b.y += b.speed * 0.35 * dt;
+    if (b.y > L.gridBottom - b.h) removeMeeting(b); else drawMeeting(b);
+  }
+  S.t += dt;
+  drawFocus();
+}
+
+// ---------- Loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const t = now / 1000;
+  if (W !== innerWidth || H !== innerHeight) resize();
+
+  if (mode === 'menu') {
+    menuFrame(dt, t);
+  } else {
+    if (mode === 'play' || mode === 'dying') update(dt);
+    ctx.save();
+    if (S.shake > 0) ctx.translate(rand(-S.shake, S.shake) * 0.5, rand(-S.shake, S.shake) * 0.5);
+    drawCalendar(t, Math.min(1, S.t / GAME_LEN));
+    drawWarns();
+    ctx.save(); ctx.beginPath(); ctx.rect(0, L.gridTop + 1, W, H); ctx.clip();
+    for (const b of S.meetings) drawMeeting(b);
+    ctx.restore();
+    for (const p of S.powers) drawPower(p);
+    drawFocus();
+    drawOverlay();
+    ctx.restore();
+    updateHud();
+  }
+  requestAnimationFrame(frame);
+}
+
+resize();
+showMenu();
+(document.fonts && document.fonts.load ? document.fonts.load(`700 16px Fredoka`).catch(() => {}) : Promise.resolve())
+  .finally(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>
