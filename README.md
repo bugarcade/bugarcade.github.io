@@ -4,6 +4,7 @@ Tiny browser games about developer life. A new game every week.
 
 | Game | Folder |
 |------|--------|
+| Hungry Hole 🕳️ | [`hungry-hole/`](hungry-hole/) |
 | Focus Time 🎧 | [`focus-time/`](focus-time/) |
 | Friday Deploy 🔥 | [`friday-deploy/`](friday-deploy/) |
 
