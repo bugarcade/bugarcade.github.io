@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>TILT</title>
+<meta name="description" content="Tilt the board. Everything slides. Park every ball on its pad in as few moves as possible. Endless logic puzzles plus a daily board.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4efe6; --ink: #2e2a3a; --muted: #8a8296; --card: #fffaf2; --line: #e6dccb;
+    --red: #ff5a5f; --blue: #3b82f6; --amber: #f5a623; --green: #22c55e;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: "Fredoka", system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .screen.on { display: flex; }
+
+  /* ---------- menu ---------- */
+  #menu { justify-content: center; gap: 14px; text-align: center; }
+  .logo { font-size: clamp(64px, 18vw, 104px); font-weight: 700; letter-spacing: 6px; line-height: 1; display: flex; gap: 2px; }
+  .logo span { display: inline-block; animation: wob 3.2s ease-in-out infinite; }
+  .logo span:nth-child(1) { color: var(--red); }
+  .logo span:nth-child(2) { color: var(--blue); animation-delay: .15s; }
+  .logo span:nth-child(3) { color: var(--amber); animation-delay: .3s; }
+  .logo span:nth-child(4) { color: var(--ink); animation-delay: .45s; }
+  @keyframes wob { 0%, 100% { transform: rotate(0) translateY(0); } 25% { transform: rotate(-6deg) translateY(-4px); } 75% { transform: rotate(6deg) translateY(2px); } }
+  .sub { color: var(--muted); font-size: 17px; max-width: 320px; line-height: 1.4; margin-bottom: 12px; }
+  .btn {
+    width: min(300px, 100%); padding: 14px 18px; border-radius: 16px; font-size: 19px; font-weight: 600;
+    background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line);
+    transition: transform .08s, box-shadow .08s; display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #15121c; }
+  .btn.primary:active { box-shadow: 0 1px 0 #15121c; }
+  .btn small { font-size: 13px; font-weight: 500; opacity: .7; }
+  .btn .done { color: var(--green); }
+  .foot { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 13px; color: var(--muted); }
+  .foot a { color: var(--muted); }
+
+  /* ---------- level select ---------- */
+  #levels { gap: 14px; }
+  .bar { width: min(520px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+  .bar h2 { font-size: 22px; font-weight: 600; text-align: center; flex: 1; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; font-size: 20px; display: grid; place-items: center; background: var(--card); border: 2px solid var(--line); }
+  .grid { width: min(520px, 100%); display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; overflow-y: auto; padding: 4px 2px 20px; }
+  .lv { aspect-ratio: 1; border-radius: 14px; background: var(--card); border: 2px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 20px; font-weight: 600; }
+  .lv .st { font-size: 10px; letter-spacing: 1px; color: var(--amber); height: 12px; }
+  .lv.cur { border-color: var(--ink); }
+  .lv:disabled { opacity: .4; cursor: default; }
+
+  /* ---------- game ---------- */
+  #game { gap: 10px; }
+  .hud { width: min(520px, 100%); display: flex; justify-content: center; gap: 22px; font-size: 16px; color: var(--muted); }
+  .hud b { color: var(--ink); font-weight: 600; font-size: 20px; }
+  #tip { width: min(520px, 100%); min-height: 44px; text-align: center; font-size: 15px; color: var(--ink); line-height: 1.35; padding: 0 8px; display: flex; align-items: center; justify-content: center; transition: opacity .3s; }
+  #stage { flex: 1; width: 100%; display: grid; place-items: center; perspective: 900px; min-height: 0; }
+  #board { touch-action: none; border-radius: 22px; transition: transform .18s ease-out; box-shadow: 0 18px 40px rgba(46, 42, 58, .18), 0 4px 0 #dccfb9; }
+  .controls { display: flex; gap: 12px; width: min(520px, 100%); justify-content: center; }
+  .controls .btn { width: auto; flex: 1; max-width: 160px; font-size: 16px; padding: 12px 10px; }
+
+  /* ---------- win ---------- */
+  #win { position: fixed; inset: 0; display: none; place-items: center; background: rgba(244, 239, 230, .82); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  #win.on { display: grid; }
+  .card { width: min(360px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 26px 22px 22px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 20px 50px rgba(46, 42, 58, .2); animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } }
+  .card h3 { font-size: 30px; font-weight: 700; }
+  .stars { font-size: 44px; letter-spacing: 6px; }
+  .stars i { font-style: normal; display: inline-block; animation: pop .4s cubic-bezier(.2, 1.6, .4, 1) both; }
+  .stars i.off { filter: grayscale(1); opacity: .25; }
+  .card p { color: var(--muted); font-size: 16px; line-height: 1.4; }
+  .card .btn { width: 100%; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .row .btn { flex: 1; }
+  #toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 15px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 9; white-space: nowrap; }
+  #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+  @media (prefers-reduced-motion: reduce) { .logo span { animation: none; } #board { transition: none; } }
+</style>
+</head>
+<body>
+
+<section id="menu" class="screen on">
+  <div class="logo" aria-label="TILT"><span>T</span><span>I</span><span>L</span><span>T</span></div>
+  <p class="sub">Tilt the board. Everything slides.<br>Park every ball on its pad.</p>
+  <button class="btn primary" id="bPlay">▶ Play <small id="playLv"></small></button>
+  <button class="btn" id="bDaily">📅 Daily puzzle <small id="dailyLbl"></small></button>
+  <button class="btn" id="bLevels">▦ Levels</button>
+  <p class="foot"><a href="../">More games at Bug Arcade →</a></p>
+</section>
+
+<section id="levels" class="screen">
+  <div class="bar"><button class="icon" data-go="menu" aria-label="Back">←</button><h2>Levels</h2><span style="width:44px"></span></div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<section id="game" class="screen">
+  <div class="bar">
+    <button class="icon" data-go="menu" aria-label="Menu">←</button>
+    <h2 id="title">Level 1</h2>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div class="hud"><span>Moves <b id="moves">0</b></span><span>Par <b id="par">0</b></span></div>
+  <div id="tip"></div>
+  <div id="stage"><canvas id="board"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="bUndo">↶ Undo</button>
+    <button class="btn" id="bRestart">⟲ Restart</button>
+    <button class="btn" id="bHint">💡 Hint</button>
+  </div>
+</section>
+
+<div id="win" role="dialog" aria-modal="true">
+  <div class="card">
+    <h3 id="winTitle">Solved!</h3>
+    <div class="stars" id="winStars"></div>
+    <p id="winText"></p>
+    <button class="btn primary" id="bNext">Next level →</button>
+    <div class="row"><button class="btn" id="bShare">Share</button><button class="btn" id="bAgain">Retry</button></div>
+  </div>
+</div>
+<div id="toast"></div>
+<canvas id="fx"></canvas>
+
+<script src="engine.js"></script>
+<script>
+(() => {
+  const { step, isWin, solve, level, daily, PIT, WALL, DIRS } = window.Tilt;
+  const $ = (id) => document.getElementById(id);
+  const COLORS = ['#ff5a5f', '#3b82f6', '#f5a623'];
+  const DARK = ['#c9353a', '#1d5ed6', '#c27a05'];
+
+  // ---------- storage (best effort) ----------
+  const store = {
+    load() { try { return JSON.parse(localStorage.getItem('tilt-progress')) || {}; } catch { return {}; } },
+    save(d) { try { localStorage.setItem('tilt-progress', JSON.stringify(d)); } catch {} },
+  };
+  const prog = Object.assign({ unlocked: 1, stars: {}, daily: {}, tips: {}, mute: false }, store.load());
+  const persist = () => store.save(prog);
+
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 8)) / 864e5) + 1; })();
+
+  // ---------- sound ----------
+  let ac = null;
+  function tone(freq, dur = .08, type = 'sine', vol = .15, slide = 0, delay = 0) {
+    if (prog.mute) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + .02);
+    } catch {}
+  }
+  const sfx = {
+    land: (i) => tone([440, 392, 523, 300][i] || 300, .07, 'triangle', .12),
+    bump: () => tone(110, .1, 'square', .05),
+    fall: () => tone(500, .45, 'sine', .16, -440),
+    fill: () => tone(160, .25, 'triangle', .18, -80),
+    pad: () => tone(880, .12, 'sine', .08),
+    win: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .22, 'triangle', .14, 0, i * .09)),
+  };
+
+  // ---------- screens ----------
+  function show(id) {
+    document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
+    if (id === 'menu') refreshMenu();
+    if (id === 'levels') buildGrid();
+    if (id === 'game') resize();
+  }
+  document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { closeWin(); show(b.dataset.go); }));
+
+  function starStr(n) { return '★'.repeat(n) + '☆'.repeat(3 - n); }
+  function refreshMenu() {
+    $('playLv').textContent = 'Level ' + prog.unlocked;
+    const d = prog.daily[today];
+    $('dailyLbl').innerHTML = d ? `<span class="done">#${dailyNo} ✓ ${starStr(d.stars)}</span>` : '#' + dailyNo;
+  }
+  function buildGrid() {
+    const g = $('grid'); g.innerHTML = '';
+    const max = Math.max(30, Math.ceil((prog.unlocked + 5) / 5) * 5);
+    for (let n = 1; n <= max; n++) {
+      const b = document.createElement('button');
+      b.className = 'lv' + (n === prog.unlocked ? ' cur' : '');
+      const locked = n > prog.unlocked;
+      b.disabled = locked;
+      b.innerHTML = `${locked ? '🔒' : n}<span class="st">${prog.stars[n] ? starStr(prog.stars[n]) : ''}</span>`;
+      b.addEventListener('click', () => startLevel(n));
+      g.appendChild(b);
+    }
+    const cur = g.querySelector('.cur'); if (cur) cur.scrollIntoView({ block: 'center' });
+  }
+
+  // ---------- game state ----------
+  let G = null; // { lv, n, isDaily, pos, hist, path, hint, solved }
+  let anim = null, queued = null, hintFlash = null;
+
+  const TIPS = [
+    [1, 'Swipe or use the arrow keys to <b>tilt</b> the board. Everything slides until it hits something.'],
+    [2, 'The ball must <b>stop</b> on its pad. Sliding over it does not count.'],
+    [4, 'Holes swallow balls. Don\'t worry, a fall is undone.'],
+    [8, 'Two balls. Both have to rest on their own pads <b>at the same time</b>.'],
+    [19, 'Crates slide too. Drop a crate into a hole and the hole is <b>filled</b>.'],
+    [36, 'Three balls. Good luck.'],
+  ];
+  function tipFor(n) {
+    if (G.isDaily) return 'Same board for everyone today. Can you hit par?';
+    const t = TIPS.find(([lvl]) => lvl === n);
+    if (t) return t[1];
+    return `Par is the shortest possible solution. Stuck? Undo is free.`;
+  }
+
+  function startLevel(n) {
+    closeWin();
+    G = { lv: level(n), n, isDaily: false };
+    resetState();
+    $('title').textContent = 'Level ' + n;
+    show('game');
+  }
+  function startDaily() {
+    closeWin();
+    G = { lv: daily(today), n: 0, isDaily: true };
+    resetState();
+    $('title').textContent = 'Daily #' + dailyNo;
+    show('game');
+  }
+  function resetState() {
+    Object.assign(G, { pos: G.lv.start.slice(), hist: [], path: [], hint: false, solved: false });
+    anim = null; queued = null; hintFlash = null;
+    $('par').textContent = G.lv.par;
+    $('tip').innerHTML = '<span>' + tipFor(G.n) + '</span>';
+    updateHud();
+  }
+  function updateHud() { $('moves').textContent = G.path.length; }
+
+  // ---------- moves ----------
+  function move(dir) {
+    if (!G || G.solved || !$('game').classList.contains('on')) return;
+    if (anim) { queued = dir; return; }
+    const r = step(G.lv, G.pos, dir);
+    tiltBoard(dir);
+    if (!r.moved) { sfx.bump(); return; }
+    hintFlash = null;
+    G.hist.push(G.pos);
+    G.path.push(dir);
+    updateHud();
+    const filledBefore = filledSet(G.pos);
+    anim = { from: G.pos, to: r.pos, dist: r.dist, dir, t0: performance.now(), landed: new Set(), r, filledBefore };
+  }
+  // cells travelled after t ms: starts slow, speeds up like a rolling ball
+  const travelled = (t) => .004 * t + .00003 * t * t;
+
+  function finishMove() {
+    const { r, filledBefore } = anim;
+    anim = null;
+    if (r.fell >= 0) {
+      sfx.fall();
+      falling = { i: r.fell, at: r.pos[r.fell], t0: performance.now(), pos: r.pos };
+      return;
+    }
+    G.pos = r.pos;
+    const filledNow = filledSet(G.pos);
+    if (filledNow.size > filledBefore.size) { sfx.fill(); toast('Hole filled!'); }
+    const prev = G.hist[G.hist.length - 1];
+    for (let i = 0; i < G.lv.balls; i++) if (G.pos[i] === G.lv.goals[i] && prev[i] !== G.pos[i]) sfx.pad();
+    if (isWin(G.lv, G.pos)) return onWin();
+    if (queued) { const d = queued; queued = null; move(d); }
+  }
+  let falling = null;
+  function finishFall() {
+    falling = null; queued = null;
+    G.pos = G.hist.pop(); G.path.pop(); updateHud();
+    toast('Swallowed! Move undone.');
+  }
+  function filledSet(pos) {
+    const s = new Set();
+    for (let i = G.lv.balls; i < pos.length; i++) if (G.lv.cells[pos[i]] === PIT) s.add(pos[i]);
+    return s;
+  }
+  function undo() {
+    if (!G || anim || falling || !G.hist.length || G.solved) return;
+    G.pos = G.hist.pop(); G.path.pop(); hintFlash = null; updateHud(); tone(330, .06, 'triangle', .08);
+  }
+  function restart() { if (!G || anim || falling) return; resetState(); tone(260, .08, 'triangle', .08); }
+  function hint() {
+    if (!G || anim || falling || G.solved) return;
+    const sol = solve(G.lv, G.pos, 30);
+    if (!sol) { toast('No way out from here. Restart!'); sfx.bump(); return; }
+    if (!G.hint) toast('Hint used: max 2 stars');
+    G.hint = true;
+    hintFlash = { dir: sol[0], t0: performance.now() };
+  }
+
+  function tiltBoard(dir) {
+    const [dx, dy] = DIRS[dir];
+    const b = $('board');
+    b.style.transform = `rotateX(${-dy * 9}deg) rotateY(${dx * 9}deg)`;
+    clearTimeout(tiltBoard.t);
+    tiltBoard.t = setTimeout(() => (b.style.transform = ''), 220);
+  }
+
+  // ---------- win ----------
+  function onWin() {
+    G.solved = true;
+    const m = G.path.length, par = G.lv.par;
+    let stars = m <= par ? 3 : m <= par + 3 ? 2 : 1;
+    if (G.hint) stars = Math.min(stars, 2);
+    sfx.win(); confetti();
+    if (G.isDaily) {
+      const prev = prog.daily[today];
+      if (!prev || m < prev.moves) prog.daily[today] = { moves: m, stars, path: G.path.slice() };
+    } else {
+      prog.stars[G.n] = Math.max(prog.stars[G.n] || 0, stars);
+      if (G.n >= prog.unlocked) prog.unlocked = G.n + 1;
+    }
+    persist();
+    setTimeout(() => {
+      $('winTitle').textContent = m < par ? 'Impossible?!' : m === par ? (stars === 3 ? 'Perfect!' : 'Solved!') : 'Solved!';
+      $('winStars').innerHTML = [0, 1, 2].map((i) => `<i class="${i < stars ? '' : 'off'}" style="animation-delay:${.1 + i * .12}s">⭐</i>`).join('');
+      $('winText').innerHTML = `${m} moves · par ${par}` + (m > par ? `<br>The shortest solution is ${par} moves.` : G.hint ? '<br>(with a hint)' : '');
+      $('bNext').textContent = G.isDaily ? 'Back to menu' : 'Next level →';
+      $('bShare').style.display = G.isDaily ? '' : 'none';
+      $('win').classList.add('on');
+    }, 650);
+  }
+  function closeWin() { $('win').classList.remove('on'); }
+  $('bNext').addEventListener('click', () => { if (G.isDaily) { closeWin(); show('menu'); } else startLevel(G.n + 1); });
+  $('bAgain').addEventListener('click', () => { closeWin(); resetState(); });
+  $('bShare').addEventListener('click', async () => {
+    const d = prog.daily[today]; if (!d) return;
+    // no arrows: sharing the route would spoil today's board
+    const bar = '🟩'.repeat(Math.min(d.moves, G.lv.par)) + '🟥'.repeat(Math.max(0, d.moves - G.lv.par));
+    const text = `TILT Daily #${dailyNo} ${'⭐'.repeat(d.stars)}\n${d.moves} moves (par ${G.lv.par})\n${bar}\nbugarcade.github.io/tilt/`;
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else { await navigator.clipboard.writeText(text); toast('Copied to clipboard'); }
+    } catch {}
+  });
+
+  // ---------- rendering ----------
+  const cv = $('board'), cx = cv.getContext('2d');
+  let S = 0, cell = 0, pad = 0, dpr = 1;
+  function resize() {
+    if (!G) return;
+    const st = $('stage').getBoundingClientRect();
+    const size = Math.floor(Math.min(st.width - 8, st.height - 8, 520));
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    S = size; pad = Math.round(size * .035);
+    cell = (size - pad * 2) / G.lv.w;
+    cv.style.width = cv.style.height = size + 'px';
+    cv.width = cv.height = Math.round(size * dpr);
+  }
+  window.addEventListener('resize', resize);
+
+  function rr(x, y, w, h, r) { cx.beginPath(); cx.roundRect ? cx.roundRect(x, y, w, h, r) : cx.rect(x, y, w, h); }
+  const cxy = (c) => [pad + (c % G.lv.w) * cell, pad + Math.floor(c / G.lv.w) * cell];
+
+  function drawStatic(filled) {
+    const lv = G.lv;
+    cx.fillStyle = '#fffaf2'; rr(0, 0, S, S, 22); cx.fill();
+    for (let c = 0; c < lv.cells.length; c++) {
+      const [x, y] = cxy(c), k = lv.cells[c];
+      const chk = ((c % lv.w) + Math.floor(c / lv.w)) % 2;
+      cx.fillStyle = chk ? '#f6eee0' : '#fbf5ea';
+      cx.fillRect(x, y, cell + .5, cell + .5);
+      if (k === PIT) {
+        if (filled.has(c)) {
+          cx.fillStyle = '#c8b48e'; rr(x + cell * .08, y + cell * .08, cell * .84, cell * .84, cell * .14); cx.fill();
+          cx.strokeStyle = 'rgba(120,95,60,.35)'; cx.lineWidth = cell * .05;
+          cx.beginPath(); cx.moveTo(x + cell * .2, y + cell * .2); cx.lineTo(x + cell * .8, y + cell * .8); cx.moveTo(x + cell * .8, y + cell * .2); cx.lineTo(x + cell * .2, y + cell * .8); cx.stroke();
+        } else {
+          const g = cx.createRadialGradient(x + cell / 2, y + cell * .42, cell * .05, x + cell / 2, y + cell / 2, cell * .42);
+          g.addColorStop(0, '#05030a'); g.addColorStop(.75, '#241d33'); g.addColorStop(1, '#3d3450');
+          cx.fillStyle = g; cx.beginPath(); cx.arc(x + cell / 2, y + cell / 2, cell * .4, 0, 7); cx.fill();
+        }
+      }
+    }
+    // pads
+    lv.goals.forEach((c, i) => {
+      const [x, y] = cxy(c), m = cell * .12;
+      cx.fillStyle = COLORS[i] + '30'; rr(x + m, y + m, cell - m * 2, cell - m * 2, cell * .18); cx.fill();
+      cx.setLineDash([cell * .1, cell * .07]); cx.strokeStyle = COLORS[i]; cx.lineWidth = cell * .05;
+      rr(x + m, y + m, cell - m * 2, cell - m * 2, cell * .18); cx.stroke(); cx.setLineDash([]);
+    });
+    // walls
+    for (let c = 0; c < lv.cells.length; c++) {
+      if (lv.cells[c] !== WALL) continue;
+      const [x, y] = cxy(c), m = cell * .04;
+      cx.fillStyle = '#1f1b29'; rr(x + m, y + m + cell * .06, cell - m * 2, cell - m * 2, cell * .16); cx.fill();
+      cx.fillStyle = '#3e3850'; rr(x + m, y + m, cell - m * 2, cell - m * 2 - cell * .02, cell * .16); cx.fill();
+      cx.fillStyle = 'rgba(255,255,255,.08)'; rr(x + m * 3, y + m * 2.5, cell - m * 6, cell * .22, cell * .1); cx.fill();
+    }
+  }
+
+  function drawBall(i, x, y, scale = 1, glow = false) {
+    const r = cell * .36 * scale, X = x + cell / 2, Y = y + cell / 2;
+    if (glow) { cx.fillStyle = COLORS[i] + '40'; cx.beginPath(); cx.arc(X, Y, cell * .48, 0, 7); cx.fill(); }
+    cx.fillStyle = 'rgba(0,0,0,.14)'; cx.beginPath(); cx.ellipse(X, Y + r * .82, r * .9, r * .32, 0, 0, 7); cx.fill();
+    const g = cx.createRadialGradient(X - r * .35, Y - r * .4, r * .1, X, Y, r);
+    g.addColorStop(0, '#ffffffcc'); g.addColorStop(.25, COLORS[i]); g.addColorStop(1, DARK[i]);
+    cx.fillStyle = g; cx.beginPath(); cx.arc(X, Y, r, 0, 7); cx.fill();
+  }
+  function drawCrate(x, y, scale = 1) {
+    const s = cell * .8 * scale, X = x + (cell - s) / 2, Y = y + (cell - s) / 2;
+    cx.fillStyle = '#8f7650'; rr(X, Y + cell * .05, s, s, cell * .12); cx.fill();
+    cx.fillStyle = '#d4bc8f'; rr(X, Y, s, s, cell * .12); cx.fill();
+    cx.strokeStyle = '#a88c5f'; cx.lineWidth = cell * .06;
+    rr(X + s * .12, Y + s * .12, s * .76, s * .76, cell * .06); cx.stroke();
+    cx.beginPath(); cx.moveTo(X + s * .2, Y + s * .2); cx.lineTo(X + s * .8, Y + s * .8); cx.stroke();
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    drawFx(now);
+    if (!G || !$('game').classList.contains('on') || !S) return;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, S, S);
+    const lv = G.lv;
+    let pos = G.pos, offs = null, filled = filledSet(G.pos);
+
+    if (anim) {
+      const t = now - anim.t0, s = travelled(t);
+      const [dx, dy] = DIRS[anim.dir];
+      offs = anim.from.map((c, i) => {
+        const d = Math.min(s, anim.dist[i]);
+        if (d >= anim.dist[i] && anim.dist[i] > 0 && !anim.landed.has(i)) { anim.landed.add(i); sfx.land(i < lv.balls ? i : 3); }
+        return [dx * d * cell, dy * d * cell];
+      });
+      pos = anim.from;
+      filled = anim.filledBefore;
+      if (s >= Math.max(...anim.dist)) { const done = anim; finishMove(); if (anim === null && !falling) { pos = G.pos; offs = null; filled = filledSet(G.pos); } else if (falling) { pos = falling.pos; offs = null; filled = done.filledBefore; } }
+    } else if (falling) {
+      pos = falling.pos;
+    }
+
+    drawStatic(filled);
+
+    // a crate sitting in a hole is drawn as filled floor by drawStatic
+    for (let i = lv.balls; i < pos.length; i++) {
+      if (filled.has(pos[i]) && !offs) continue; // already part of the floor
+      const [x, y] = cxy(pos[i]);
+      const o = offs ? offs[i] : [0, 0];
+      drawCrate(x + o[0], y + o[1]);
+    }
+    for (let i = 0; i < lv.balls; i++) {
+      const [x, y] = cxy(pos[i]);
+      const o = offs ? offs[i] : [0, 0];
+      let sc = 1;
+      if (falling && falling.i === i) {
+        const k = (now - falling.t0) / 420;
+        sc = Math.max(0, 1 - k);
+        if (k >= 1.6) { finishFall(); continue; }
+      }
+      const resting = !anim && !falling && pos[i] === lv.goals[i];
+      drawBall(i, x + o[0], y + o[1], sc, resting);
+    }
+
+    if (hintFlash) {
+      const k = (now - hintFlash.t0) / 1000;
+      if (k > 2.4) hintFlash = null;
+      else {
+        const [dx, dy] = DIRS[hintFlash.dir], a = .55 + .35 * Math.sin(k * 8);
+        cx.save(); cx.translate(S / 2, S / 2); cx.rotate(Math.atan2(dy, dx));
+        cx.globalAlpha = a; cx.fillStyle = '#2e2a3a';
+        const L = S * .16, off = S * .04 * Math.sin(k * 8);
+        cx.beginPath(); cx.moveTo(L + off, 0); cx.lineTo(-L * .2 + off, -L * .7); cx.lineTo(-L * .2 + off, -L * .25); cx.lineTo(-L + off, -L * .25); cx.lineTo(-L + off, L * .25); cx.lineTo(-L * .2 + off, L * .25); cx.lineTo(-L * .2 + off, L * .7); cx.closePath(); cx.fill();
+        cx.restore();
+      }
+    }
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- confetti ----------
+  const fx = $('fx'), fc = fx.getContext('2d');
+  let parts = [];
+  function confetti() {
+    fx.width = innerWidth; fx.height = innerHeight;
+    const r = cv.getBoundingClientRect();
+    for (let i = 0; i < 90; i++) {
+      parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4,
+        c: ['#ff5a5f', '#3b82f6', '#f5a623', '#22c55e', '#2e2a3a'][i % 5], s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+    }
+  }
+  function drawFx() {
+    if (!parts.length) return;
+    fc.clearRect(0, 0, fx.width, fx.height);
+    parts = parts.filter((p) => p.life < 120 && p.y < fx.height + 20);
+    for (const p of parts) {
+      p.vy += .45; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++;
+      fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore();
+    }
+    if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+  }
+
+  // ---------- toast ----------
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 1600);
+  }
+
+  // ---------- input ----------
+  const KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right' };
+  addEventListener('keydown', (e) => {
+    if ($('win').classList.contains('on')) { if (e.key === 'Enter' || e.key === ' ') $('bNext').click(); return; }
+    if (KEYS[e.key]) { e.preventDefault(); move(KEYS[e.key]); }
+    else if (e.key === 'z' || e.key === 'u' || e.key === 'Backspace') undo();
+    else if (e.key === 'r') restart();
+    else if (e.key === 'h') hint();
+  });
+  let sw = null;
+  $('game').addEventListener('pointerdown', (e) => { if (e.target.closest('button')) return; sw = { x: e.clientX, y: e.clientY, done: false }; });
+  addEventListener('pointermove', (e) => {
+    if (!sw || sw.done) return;
+    const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+    if (Math.hypot(dx, dy) < 26) return;
+    sw.done = true;
+    move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+  addEventListener('pointerup', () => (sw = null));
+  addEventListener('pointercancel', () => (sw = null));
+
+  $('bUndo').addEventListener('click', undo);
+  $('bRestart').addEventListener('click', restart);
+  $('bHint').addEventListener('click', hint);
+  $('bPlay').addEventListener('click', () => startLevel(prog.unlocked));
+  $('bDaily').addEventListener('click', startDaily);
+  $('bLevels').addEventListener('click', () => show('levels'));
+  const muteIcon = () => ($('bMute').textContent = prog.mute ? '🔇' : '🔊');
+  $('bMute').addEventListener('click', () => { prog.mute = !prog.mute; persist(); muteIcon(); });
+  muteIcon();
+  refreshMenu();
+})();
+</script>
+</body>
+</html>
