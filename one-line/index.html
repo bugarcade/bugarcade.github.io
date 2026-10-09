@@ -42,12 +42,13 @@
   #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
   .foot { font-size: 13px; color: var(--muted); }
   .foot a { color: var(--muted); }
+  .portal .web-only { visibility: hidden; }
 </style>
 </head>
 <body>
 <main>
   <div class="bar">
-    <a class="icon" href="../" aria-label="More games">←</a>
+    <a class="icon web-only" href="../" aria-label="More games">←</a>
     <h1 id="title">Level 1</h1>
     <button class="icon" id="bMute" aria-label="Sound">🔊</button>
   </div>
@@ -58,7 +59,7 @@
     <button class="btn" id="bUndo">↶ Undo</button>
     <button class="btn" id="bRestart">⟲ Restart</button>
   </div>
-  <p class="foot"><a href="../">More games at Bug Arcade</a></p>
+  <p class="foot web-only"><a href="../">More games at Bug Arcade</a></p>
 </main>
 <div id="win" role="dialog" aria-modal="true">
   <div class="card">
@@ -69,6 +70,7 @@
 </div>
 <canvas id="fx"></canvas>
 
+<script src="../portal.js"></script>
 <script src="engine.js"></script>
 <script>
 (() => {
@@ -82,11 +84,11 @@
   const persist = () => store.save(prog);
 
   // ---------- sound: each new dot plays the next note of a pentatonic scale ----------
-  let ac = null;
+  let ac = null, adPause = false;
   const PENTA = [0, 2, 4, 7, 9];
   const noteHz = (i) => 261.63 * Math.pow(2, (Math.floor(i / 5) * 12 + PENTA[i % 5]) / 12);
   function tone(f, dur = .25, vol = .12, type = 'sine', delay = 0) {
-    if (prog.mute) return;
+    if (prog.mute || adPause) return;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
@@ -115,6 +117,7 @@
       : n === 3 ? 'Went wrong? Drag back along your line to undo.' : '';
     $('win').classList.remove('on');
     resize(); update();
+    Portal.start();
   }
   function update() { $('done').textContent = path.length; }
 
@@ -135,6 +138,7 @@
   }
   function win() {
     sfx.win(); confetti();
+    Portal.stop(); Portal.happy();
     const n = prog.level;
     setTimeout(() => {
       $('winTitle').textContent = ['Nice!', 'Clean!', 'Smooth!', 'Big brain!'][n % 4];
@@ -142,7 +146,14 @@
       $('win').classList.add('on');
     }, 500);
   }
-  $('bNext').addEventListener('click', () => start(prog.level + 1));
+  // ad break every 3rd level, never in the tutorial levels
+  $('bNext').addEventListener('click', () => {
+    const next = prog.level + 1;
+    if (next <= 4 || next % 3) return start(next);
+    $('bNext').disabled = true;
+    Portal.break(() => { adPause = true; if (ac) ac.suspend(); }, () => { adPause = false; if (ac) ac.resume(); })
+      .then(() => { $('bNext').disabled = false; start(next); });
+  });
   $('bUndo').addEventListener('click', () => { if (path.length > 1) { used.delete(path.pop()); sfx.back(); update(); } });
   $('bRestart').addEventListener('click', () => { path = [L.start]; used = new Set(path); update(); });
   const muteIcon = () => ($('bMute').textContent = prog.mute ? '🔇' : '🔊');
@@ -254,6 +265,7 @@
 
   muteIcon();
   start(prog.level);
+  Portal.loaded();
 })();
 </script>
 </body>

@@ -47,6 +47,7 @@
   .btn .done { color: var(--green); }
   .foot { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 13px; color: var(--muted); }
   .foot a { color: var(--muted); }
+  .portal .web-only { display: none !important; }
 
   /* ---------- level select ---------- */
   #levels { gap: 14px; }
@@ -96,7 +97,7 @@
   <button class="btn primary" id="bPlay">▶ Play <small id="playLv"></small></button>
   <button class="btn" id="bDaily">📅 Daily puzzle <small id="dailyLbl"></small></button>
   <button class="btn" id="bLevels">▦ Levels</button>
-  <p class="foot"><a href="../">More games at Bug Arcade →</a></p>
+  <p class="foot web-only"><a href="../">More games at Bug Arcade →</a></p>
 </section>
 
 <section id="levels" class="screen">
@@ -126,12 +127,13 @@
     <div class="stars" id="winStars"></div>
     <p id="winText"></p>
     <button class="btn primary" id="bNext">Next level →</button>
-    <div class="row"><button class="btn" id="bShare">Share</button><button class="btn" id="bAgain">Retry</button></div>
+    <div class="row"><button class="btn web-only" id="bShare">Share</button><button class="btn" id="bAgain">Retry</button></div>
   </div>
 </div>
 <div id="toast"></div>
 <canvas id="fx"></canvas>
 
+<script src="../portal.js"></script>
 <script src="engine.js"></script>
 <script>
 (() => {
@@ -152,9 +154,9 @@
   const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 8)) / 864e5) + 1; })();
 
   // ---------- sound ----------
-  let ac = null;
+  let ac = null, adPause = false;
   function tone(freq, dur = .08, type = 'sine', vol = .15, slide = 0, delay = 0) {
-    if (prog.mute) return;
+    if (prog.mute || adPause) return;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
@@ -179,6 +181,7 @@
     if (id === 'menu') refreshMenu();
     if (id === 'levels') buildGrid();
     if (id === 'game') resize();
+    if (id === 'game') Portal.start(); else Portal.stop();
   }
   document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { closeWin(); show(b.dataset.go); }));
 
@@ -318,6 +321,7 @@
     let stars = m <= par ? 3 : m <= par + 3 ? 2 : 1;
     if (G.hint) stars = Math.min(stars, 2);
     sfx.win(); confetti();
+    Portal.stop(); Portal.happy();
     if (G.isDaily) {
       const prev = prog.daily[today];
       if (!prev || m < prev.moves) prog.daily[today] = { moves: m, stars, path: G.path.slice() };
@@ -336,8 +340,16 @@
     }, 650);
   }
   function closeWin() { $('win').classList.remove('on'); }
-  $('bNext').addEventListener('click', () => { if (G.isDaily) { closeWin(); show('menu'); } else startLevel(G.n + 1); });
-  $('bAgain').addEventListener('click', () => { closeWin(); resetState(); });
+  // ad break every 3rd level, never in the tutorial levels
+  $('bNext').addEventListener('click', () => {
+    if (G.isDaily) { closeWin(); show('menu'); return; }
+    const next = G.n + 1;
+    if (next <= 4 || next % 3) return startLevel(next);
+    $('bNext').disabled = true;
+    Portal.break(() => { adPause = true; if (ac) ac.suspend(); }, () => { adPause = false; if (ac) ac.resume(); })
+      .then(() => { $('bNext').disabled = false; startLevel(next); });
+  });
+  $('bAgain').addEventListener('click', () => { closeWin(); resetState(); Portal.start(); });
   $('bShare').addEventListener('click', async () => {
     const d = prog.daily[today]; if (!d) return;
     // no arrows: sharing the route would spoil today's board
@@ -541,6 +553,7 @@
   $('bMute').addEventListener('click', () => { prog.mute = !prog.mute; persist(); muteIcon(); });
   muteIcon();
   refreshMenu();
+  Portal.loaded();
 })();
 </script>
 </body>
