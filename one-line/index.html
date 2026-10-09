@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>ONE LINE</title>
+<meta name="description" content="Connect every dot with one line. No lifting, no crossing. Looks easy. Endless levels.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #fdf6ec; --ink: #26213a; --muted: #9a90a8; --card: #fffdf8; --line: #eadfce; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: "Fredoka", system-ui, -apple-system, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  main { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .bar { width: min(520px, 100%); display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+  .bar h1 { font-size: 22px; font-weight: 600; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: var(--card); border: 2px solid var(--line); text-decoration: none; color: inherit; }
+  #count { font-size: 16px; color: var(--muted); }
+  #count b { color: var(--ink); font-size: 20px; }
+  #tip { min-height: 40px; text-align: center; font-size: 16px; line-height: 1.35; color: var(--ink); max-width: 420px; transition: opacity .3s; }
+  #stage { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+  #board { touch-action: none; display: block; }
+  .controls { display: flex; gap: 12px; width: min(520px, 100%); justify-content: center; }
+  .btn { flex: 1; max-width: 170px; padding: 13px 10px; border-radius: 16px; font-size: 17px; font-weight: 600;
+    background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #120f1c; }
+  #win { position: fixed; inset: 0; display: none; place-items: center; background: rgba(253, 246, 236, .8); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  #win.on { display: grid; }
+  .card { width: min(340px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 26px 22px 22px; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; box-shadow: 0 20px 50px rgba(38, 33, 58, .18); animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } }
+  .card h2 { font-size: 32px; }
+  .card p { color: var(--muted); font-size: 16px; }
+  .card .btn { width: 100%; max-width: none; }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+  .foot { font-size: 13px; color: var(--muted); }
+  .foot a { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <a class="icon" href="../" aria-label="More games">←</a>
+    <h1 id="title">Level 1</h1>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div id="count"><b id="done">1</b> / <span id="total">9</span> dots</div>
+  <div id="tip"></div>
+  <div id="stage"><canvas id="board"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="bUndo">↶ Undo</button>
+    <button class="btn" id="bRestart">⟲ Restart</button>
+  </div>
+  <p class="foot"><a href="../">More games at Bug Arcade</a></p>
+</main>
+<div id="win" role="dialog" aria-modal="true">
+  <div class="card">
+    <h2 id="winTitle">Nice!</h2>
+    <p id="winText"></p>
+    <button class="btn primary" id="bNext">Next level →</button>
+  </div>
+</div>
+<canvas id="fx"></canvas>
+
+<script src="engine.js"></script>
+<script>
+(() => {
+  const { level, neighbours, openMoves } = window.OneLine;
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    load() { try { return JSON.parse(localStorage.getItem('one-line')) || {}; } catch { return {}; } },
+    save(d) { try { localStorage.setItem('one-line', JSON.stringify(d)); } catch {} },
+  };
+  const prog = Object.assign({ level: 1, mute: false }, store.load());
+  const persist = () => store.save(prog);
+
+  // ---------- sound: each new dot plays the next note of a pentatonic scale ----------
+  let ac = null;
+  const PENTA = [0, 2, 4, 7, 9];
+  const noteHz = (i) => 261.63 * Math.pow(2, (Math.floor(i / 5) * 12 + PENTA[i % 5]) / 12);
+  function tone(f, dur = .25, vol = .12, type = 'sine', delay = 0) {
+    if (prog.mute) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .005); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + .02);
+    } catch {}
+  }
+  const sfx = {
+    add: (i) => { const f = noteHz(i % 15); tone(f, .3, .1); tone(f * 2, .08, .03, 'triangle'); },
+    back: () => tone(300, .06, .05, 'triangle'),
+    stuck: () => { tone(160, .18, .1, 'square'); tone(120, .3, .1, 'square', .16); },
+    win: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .35, .12, 'triangle', i * .08)),
+  };
+
+  // ---------- state ----------
+  let L, path, used, stuckAt = -9, shake = 0;
+  function start(n) {
+    prog.level = n; persist();
+    L = level(n);
+    path = [L.start]; used = new Set(path);
+    $('title').textContent = 'Level ' + n;
+    $('total').textContent = L.cells;
+    $('tip').textContent = n === 1 ? 'Drag from the big dot. Connect every dot in one line.'
+      : n === 2 ? 'Dark squares are holes. Go around them.'
+      : n === 3 ? 'Went wrong? Drag back along your line to undo.' : '';
+    $('win').classList.remove('on');
+    resize(); update();
+  }
+  function update() { $('done').textContent = path.length; }
+
+  function extend(c) {
+    const last = path[path.length - 1];
+    if (path.length > 1 && c === path[path.length - 2]) { used.delete(path.pop()); sfx.back(); update(); return; }
+    if (used.has(c) || L.holes.has(c) || !neighbours(L.w, L.h, last).includes(c)) return;
+    path.push(c); used.add(c); sfx.add(path.length - 1); update();
+    if (path.length === L.cells) return win();
+    if (!openMoves(L, used, c).length) { stuckAt = performance.now(); shake = 1; sfx.stuck(); if (navigator.vibrate) navigator.vibrate(60); }
+  }
+  function cutTo(c) {
+    const i = path.indexOf(c);
+    if (i < 0) return false;
+    while (path.length > i + 1) used.delete(path.pop());
+    update();
+    return true;
+  }
+  function win() {
+    sfx.win(); confetti();
+    const n = prog.level;
+    setTimeout(() => {
+      $('winTitle').textContent = ['Nice!', 'Clean!', 'Smooth!', 'Big brain!'][n % 4];
+      $('winText').textContent = `All ${L.cells} dots in one line.`;
+      $('win').classList.add('on');
+    }, 500);
+  }
+  $('bNext').addEventListener('click', () => start(prog.level + 1));
+  $('bUndo').addEventListener('click', () => { if (path.length > 1) { used.delete(path.pop()); sfx.back(); update(); } });
+  $('bRestart').addEventListener('click', () => { path = [L.start]; used = new Set(path); update(); });
+  const muteIcon = () => ($('bMute').textContent = prog.mute ? '🔇' : '🔊');
+  $('bMute').addEventListener('click', () => { prog.mute = !prog.mute; persist(); muteIcon(); });
+  addEventListener('keydown', (e) => {
+    if ($('win').classList.contains('on') && (e.key === 'Enter' || e.key === ' ')) $('bNext').click();
+    if (e.key === 'z' || e.key === 'Backspace') $('bUndo').click();
+    if (e.key === 'r') $('bRestart').click();
+  });
+
+  // ---------- input: drag through cells; fast drags are sampled so no cell is skipped ----------
+  const cv = $('board'), cx = cv.getContext('2d');
+  let S = 0, cell = 0, ox = 0, dpr = 1, drag = null;
+  function cellAt(px, py, strict) {
+    const x = Math.floor((px - ox) / cell), y = Math.floor((py - ox) / cell);
+    if (x < 0 || y < 0 || x >= L.w || y >= L.h) return -1;
+    if (strict) { // only count when near the dot centre, so diagonal swipes don't jump corners
+      const dx = px - ox - (x + .5) * cell, dy = py - ox - (y + .5) * cell;
+      if (Math.hypot(dx, dy) > cell * .42) return -1;
+    }
+    return y * L.w + x;
+  }
+  function local(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  cv.addEventListener('pointerdown', (e) => {
+    const [px, py] = local(e), c = cellAt(px, py, false);
+    if (c < 0 || $('win').classList.contains('on')) return;
+    if (!cutTo(c)) return;
+    cv.setPointerCapture(e.pointerId);
+    drag = { x: px, y: py };
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const [px, py] = local(e), steps = Math.ceil(Math.hypot(px - drag.x, py - drag.y) / (cell / 5));
+    for (let i = 1; i <= steps; i++) {
+      const c = cellAt(drag.x + (px - drag.x) * i / steps, drag.y + (py - drag.y) * i / steps, true);
+      if (c >= 0 && c !== path[path.length - 1]) extend(c);
+    }
+    drag = { x: px, y: py };
+  });
+  const end = () => (drag = null);
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+
+  // ---------- drawing ----------
+  function resize() {
+    if (!L) return;
+    const r = $('stage').getBoundingClientRect();
+    cell = Math.max(30, Math.floor(Math.min((r.width - 8) / L.w, (r.height - 8) / L.h, 76)));
+    S = cell * L.w; ox = 0;
+    dpr = Math.min(devicePixelRatio || 1, 3);
+    cv.style.width = S + 'px'; cv.style.height = (cell * L.h) + 'px';
+    cv.width = Math.round(S * dpr); cv.height = Math.round(cell * L.h * dpr);
+  }
+  addEventListener('resize', resize);
+  const hue = (i, n) => `hsl(${(350 + 280 * i / Math.max(1, n - 1)) % 360} 85% 62%)`;
+  const ctr = (c) => [ox + (c % L.w + .5) * cell, ox + (Math.floor(c / L.w) + .5) * cell];
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    drawFx();
+    if (!L || !S) return;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, S, cell * L.h);
+    if (shake > 0) { cx.translate(Math.sin(now / 18) * 7 * shake, 0); shake = Math.max(0, shake - .05); }
+    for (let c = 0; c < L.w * L.h; c++) {
+      const [x, y] = ctr(c);
+      if (L.holes.has(c)) { cx.fillStyle = '#e9dfcf'; cx.beginPath(); cx.roundRect(x - cell * .4, y - cell * .4, cell * .8, cell * .8, cell * .16); cx.fill(); continue; }
+      cx.fillStyle = '#d8cdbd'; cx.beginPath(); cx.arc(x, y, cell * .12, 0, 7); cx.fill();
+    }
+    // the line, coloured along its length
+    cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.lineWidth = cell * .34;
+    for (let i = 1; i < path.length; i++) {
+      const [x1, y1] = ctr(path[i - 1]), [x2, y2] = ctr(path[i]);
+      cx.strokeStyle = hue(i, L.cells); cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke();
+    }
+    path.forEach((c, i) => { const [x, y] = ctr(c); cx.fillStyle = hue(i, L.cells); cx.beginPath(); cx.arc(x, y, cell * .2, 0, 7); cx.fill(); });
+    const [sx, sy] = ctr(L.start);
+    cx.strokeStyle = hue(0, L.cells); cx.lineWidth = cell * .07; cx.beginPath(); cx.arc(sx, sy, cell * .3 + Math.sin(now / 300) * cell * .03, 0, 7); cx.stroke();
+    // stuck: pulse the dots that can no longer be reached
+    const k = 1 - (now - stuckAt) / 900;
+    if (k > 0) {
+      for (let c = 0; c < L.w * L.h; c++) {
+        if (L.holes.has(c) || used.has(c)) continue;
+        const [x, y] = ctr(c);
+        cx.fillStyle = `rgba(255,70,90,${.85 * k})`; cx.beginPath(); cx.arc(x, y, cell * (.16 + .1 * Math.sin(now / 60)), 0, 7); cx.fill();
+      }
+    }
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- confetti ----------
+  const fx = $('fx'), fc = fx.getContext('2d');
+  let parts = [];
+  function confetti() {
+    fx.width = innerWidth; fx.height = innerHeight;
+    const r = cv.getBoundingClientRect();
+    for (let i = 0; i < 90; i++) parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4, c: hue(i % 12, 12), s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+  }
+  function drawFx() {
+    if (!parts.length) return;
+    fc.clearRect(0, 0, fx.width, fx.height);
+    parts = parts.filter((p) => p.life < 120);
+    for (const p of parts) {
+      p.vy += .45; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++;
+      fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore();
+    }
+    if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+  }
+
+  muteIcon();
+  start(prog.level);
+})();
+</script>
+</body>
+</html>
