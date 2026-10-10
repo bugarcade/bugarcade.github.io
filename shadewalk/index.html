@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>SHADEWALK</title>
+<meta name="description" content="A vampire is late home and the sun is up. You control the sun. Bend the shadows of the city to keep him in the shade.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #2b2140; --card: #fffaf1; --line: #ecdcc4; --accent: #ff8a3d; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #f9d9b5; font-family: "Fredoka", system-ui, sans-serif; color: var(--ink);
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  #pauseBtn { position: fixed; top: max(12px, env(safe-area-inset-top)); right: 14px; width: 48px; height: 48px; border-radius: 14px;
+    background: rgba(255, 250, 241, .9); border: 2px solid var(--line); font-size: 20px; font-weight: 700; z-index: 3; }
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(43, 33, 64, .45); z-index: 5; padding: 16px; }
+  .overlay.on { display: grid; }
+  .card { background: var(--card); border: 3px solid var(--line); border-radius: 26px; padding: 26px 26px 22px; width: min(420px, 100%);
+    text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 24px 60px rgba(43, 33, 64, .3);
+    animation: pop .35s cubic-bezier(.2, 1.5, .4, 1); max-height: calc(100vh - 32px); overflow-y: auto; }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } }
+  .card h2 { font-size: 34px; line-height: 1.1; }
+  .card p { font-size: 17px; color: #6d6280; }
+  .btn { width: 100%; padding: 13px 16px; border-radius: 16px; font-size: 20px; font-weight: 600; background: #fff; border: 3px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #160f24; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .stars { font-size: 46px; letter-spacing: 4px; }
+  .stars span { display: inline-block; animation: pop .45s cubic-bezier(.2, 1.6, .4, 1) both; }
+  .stars .off { filter: grayscale(1) opacity(.28); }
+  #levels .card { width: min(720px, 100%); }
+  .district { width: 100%; text-align: left; font-size: 18px; font-weight: 600; margin-top: 6px; }
+  .grid { width: 100%; display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  .lv { aspect-ratio: 1; border-radius: 12px; background: #fff; border: 2px solid var(--line); font-size: 17px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .lv small { font-size: 9px; color: #e8a400; letter-spacing: 1px; margin-top: 3px; height: 9px; }
+  .lv:disabled { opacity: .35; cursor: default; }
+  .lv.cur { border-color: var(--ink); }
+  @media (max-width: 560px) { .grid { grid-template-columns: repeat(5, 1fr); } }
+  .web-only { }
+  .portal .web-only { display: none !important; }
+  .more { font-size: 14px; color: #8b7f9c; }
+  .more a { color: inherit; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="pauseBtn" aria-label="Pause">II</button>
+
+<div class="overlay" id="pause"><div class="card">
+  <h2>Paused</h2>
+  <button class="btn primary" data-act="resume">Resume</button>
+  <div class="row"><button class="btn" data-act="restart">Restart</button><button class="btn" data-act="levels">Levels</button></div>
+  <button class="btn" data-act="sound" id="soundBtn">Sound: on</button>
+  <p class="more web-only"><a href="../">More games at Bug Arcade</a></p>
+</div></div>
+
+<div class="overlay" id="win"><div class="card">
+  <h2 id="winTitle">Home safe!</h2>
+  <div class="stars" id="winStars"></div>
+  <p id="winText"></p>
+  <button class="btn primary" data-act="next" id="nextBtn">Next level</button>
+  <div class="row"><button class="btn" data-act="restart">Replay</button><button class="btn" data-act="levels">Levels</button></div>
+</div></div>
+
+<div class="overlay" id="levels"><div class="card">
+  <h2>Levels</h2>
+  <div id="levelGrid" style="width:100%"></div>
+  <button class="btn" data-act="close-levels">Back</button>
+</div></div>
+
+<script src="../portal.js"></script>
+<script src="levels.js"></script>
+<script>
+(() => {
+'use strict';
+const { level, G, WALK, MIN_ELEV, LEVELS, DISTRICTS } = window.Levels;
+const $ = (id) => document.getElementById(id);
+const cv = $('c'), g = cv.getContext('2d');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const FONT = 'Fredoka, system-ui, sans-serif';
+const DEBUG_BOT = /[?&]bot/.test(location.search);
+
+// ---------- save ----------
+const store = {
+  load() { try { return JSON.parse(localStorage.getItem('shadewalk')) || {}; } catch { return {}; } },
+  save(d) { try { localStorage.setItem('shadewalk', JSON.stringify(d)); } catch {} },
+};
+const save = Object.assign({ unlocked: 1, stars: {}, mute: false, current: 1 }, store.load());
+const persist = () => store.save(save);
+
+// ---------- view: logical height 720, width grows with the screen ----------
+let VW = 1280, VH = 720, OY = 0, scale = 1, dpr = 1;
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = innerWidth, h = innerHeight;
+  // wide screens see more city; tall phones zoom in to at least an 800-px-wide slice
+  scale = w / h >= 16 / 9 ? h / 720 : Math.max(w / 1280, Math.min(w / 800, h / 720));
+  VW = w / scale; VH = h / scale; OY = VH - 720;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+}
+addEventListener('resize', () => { if (!captureMode) resize(); }); resize();
+
+// ---------- audio ----------
+const Audio = (() => {
+  let ac = null, master, musicGain, sfxGain, sizzle, sizzleGain, noise, nextBeat = 0, beat = 0;
+  function init() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+    master = ac.createGain(); master.gain.value = save.mute ? 0 : 1; master.connect(ac.destination);
+    musicGain = ac.createGain(); musicGain.gain.value = .32; musicGain.connect(master);
+    sfxGain = ac.createGain(); sfxGain.gain.value = .9; sfxGain.connect(master);
+    noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // continuous sizzle, volume follows how much the vampire is burning
+    const src = ac.createBufferSource(); src.buffer = noise; src.loop = true;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3800; bp.Q.value = .8;
+    sizzleGain = ac.createGain(); sizzleGain.gain.value = 0;
+    src.connect(bp).connect(sizzleGain).connect(sfxGain); src.start();
+    nextBeat = ac.currentTime + .1;
+  }
+  function tone(f, d, vol, type = 'sine', when = 0, dest) {
+    if (!ac) return;
+    const t = ac.currentTime + when, o = ac.createOscillator(), gg = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    gg.gain.setValueAtTime(0, t); gg.gain.linearRampToValueAtTime(vol, t + .01); gg.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(gg).connect(dest || sfxGain); o.start(t); o.stop(t + d + .05);
+  }
+  function hiss(d, vol, freq, when = 0) {
+    if (!ac) return;
+    const t = ac.currentTime + when, s = ac.createBufferSource(), f = ac.createBiquadFilter(), gg = ac.createGain();
+    s.buffer = noise; f.type = 'lowpass'; f.frequency.value = freq;
+    gg.gain.setValueAtTime(vol, t); gg.gain.exponentialRampToValueAtTime(.0001, t + d);
+    s.connect(f).connect(gg).connect(sfxGain); s.start(t, Math.random(), d + .1);
+  }
+  // a small spooky-cute waltz in A minor, scheduled ahead of time
+  const BASS = [110, 87.31, 98, 82.41];
+  const CHORD = [[220, 261.63, 329.63], [174.61, 220, 261.63], [196, 246.94, 293.66], [164.81, 207.65, 246.94]];
+  const MEL = [659.25, 587.33, 523.25, 493.88, 440, 523.25, 587.33, 659.25, 698.46, 659.25, 587.33, 523.25, 493.88, 523.25, 440, 415.3];
+  function music(playing) {
+    if (!ac || !playing) { if (ac) nextBeat = Math.max(nextBeat, ac.currentTime + .05); return; }
+    const spb = 60 / 132;
+    while (nextBeat < ac.currentTime + .25) {
+      const bar = Math.floor(beat / 3) % 4, b = beat % 3, when = nextBeat - ac.currentTime;
+      if (b === 0) tone(BASS[bar], spb * 2.6, .22, 'triangle', when, musicGain);
+      else CHORD[bar].forEach((f) => tone(f, spb * .8, .045, 'triangle', when, musicGain));
+      if (b !== 1 || beat % 6 === 1) tone(MEL[(beat >> 0) % MEL.length] / (b ? 2 : 1), spb * 1.2, .06, 'sine', when, musicGain);
+      nextBeat += spb; beat++;
+    }
+  }
+  return {
+    init, music,
+    setMute(m) { if (master) master.gain.value = m ? 0 : 1; },
+    suspend() { if (ac) ac.suspend(); }, resume() { if (ac) ac.resume(); },
+    sizzle(v) { if (sizzleGain) sizzleGain.gain.setTargetAtTime(v * .22, ac.currentTime, .05); },
+    bloom() { [784, 988, 1175].forEach((f, i) => tone(f, .35, .12, 'sine', i * .06)); },
+    win() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, .5, .12, 'triangle', i * .09)); },
+    poof() { hiss(.6, .4, 900); tone(220, .5, .15, 'sawtooth'); tone(110, .7, .12, 'sine', .05); },
+    bell() { tone(1318, .5, .06); tone(1568, .5, .05, 'sine', .12); },
+    click() { tone(660, .06, .06, 'triangle'); },
+    star() { tone(1568, .25, .1); tone(2093, .3, .08, 'sine', .08); },
+  };
+})();
+
+// ---------- game state ----------
+let lv, S;
+function startLevel(n) {
+  n = clamp(n, 1, LEVELS);
+  save.current = n; persist();
+  lv = level(n);
+  S = {
+    t: 0, mode: 'play', camX: 0,
+    vamp: { x: lv.startX, burn: 0, wait: false, phase: 0, lit: 0, deadT: 0 },
+    started: DEBUG_BOT, // he sets off once the player first touches the sun
+    sun: { x: VW * .72, y: 150, tx: VW * .72, ty: 150 },
+    bloom: lv.flowers.map(() => 0), got: lv.flowers.map(() => false),
+    parts: [], tipT: 0, shake: 0, light: 1, winT: 0,
+  };
+  hideOverlays();
+  botNext = 0; botWaited = 0;
+  Portal.start();
+}
+
+// ---------- geometry: casters and shade ----------
+function tramsAt(t) {
+  const out = [];
+  if (!lv.trams) return out;
+  const T = lv.trams, travel = lv.length + 900;
+  const first = Math.floor((t - T.offset - travel / T.speed) / T.period);
+  for (let k = first; k <= Math.floor((t - T.offset) / T.period) + 1; k++) {
+    const t0 = T.offset + k * T.period, x = -450 + (t - t0) * T.speed;
+    if (x > -T.w - 500 && x < lv.length + 500) out.push({ x, w: T.w, h: T.h });
+  }
+  return out;
+}
+function casters(t) {
+  const list = [];
+  for (const b of lv.buildings) list.push({ type: 'r', x1: b.x, x2: b.x + b.w, y1: G - b.h, y2: G });
+  const h = lv.home; list.push({ type: 'r', x1: h.x, x2: h.x + h.w, y1: G - h.h, y2: G });
+  for (const a of lv.awnings) list.push({ type: 'r', x1: a.x, x2: a.x + a.w, y1: a.y, y2: a.y + a.h });
+  for (const tr of lv.trees) {
+    list.push({ type: 'c', cx: tr.x, cy: G - tr.trunk - tr.r * .7, r: tr.r });
+    list.push({ type: 'r', x1: tr.x - 6, x2: tr.x + 6, y1: G - tr.trunk, y2: G });
+  }
+  for (const tm of tramsAt(t)) list.push({ type: 'r', x1: tm.x, x2: tm.x + tm.w, y1: G - 18 - tm.h, y2: G - 18, tram: true });
+  return list;
+}
+// The sun's left/right position alone sets the light angle (far left = long shadows to the right);
+// its height only matters for hiding behind clouds.
+function sunDir(sun) {
+  const f = clamp((sun.x - 60) / (VW - 120), 0, 1);
+  const a = Math.PI - MIN_ELEV - f * (Math.PI - 2 * MIN_ELEV);
+  return { dx: Math.cos(a), dy: -Math.sin(a), a };
+}
+function blocked(px, py, d, list) {
+  for (const c of list) {
+    if (c.type === 'r') {
+      // slab test along the ray; starting inside counts as shade
+      let t0 = 0, t1 = 1e9;
+      for (const [p, dd, lo, hi] of [[px, d.dx, c.x1, c.x2], [py, d.dy, c.y1, c.y2]]) {
+        if (Math.abs(dd) < 1e-9) { if (p < lo || p > hi) { t0 = 1; t1 = 0; break; } continue; }
+        let a = (lo - p) / dd, b = (hi - p) / dd; if (a > b) [a, b] = [b, a];
+        t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+        if (t0 > t1) break;
+      }
+      if (t0 <= t1) return true;
+    } else {
+      const ox = px - c.cx, oy = py - c.cy, b = ox * d.dx + oy * d.dy, cc = ox * ox + oy * oy - c.r * c.r;
+      if (cc <= 0) return true;
+      if (b < 0 && b * b - cc >= 0) return true;
+    }
+  }
+  return false;
+}
+// cloud k: deterministic drift across the sky
+function cloudsAt(t) {
+  const out = [];
+  const C = lv.clouds; if (!C) return out;
+  const span = VW + C.w * 2 + 200, life = span / Math.abs(C.speed);
+  for (let k = Math.floor((t - life) / C.every); k <= Math.floor(t / C.every); k++) {
+    const age = t - k * C.every; if (age < 0 || age > life) continue;
+    const r1 = Math.abs(Math.sin(k * 12.9898 + C.seed * 78.233) * 43758.5453) % 1;
+    const x = C.speed > 0 ? -C.w - 100 + age * C.speed : VW + C.w + 100 + age * C.speed;
+    out.push({ x, y: 120 + r1 * 210, w: C.w * (.85 + .3 * ((r1 * 7) % 1)), k });
+  }
+  return out;
+}
+function sunLight(sun, clouds) {
+  let cover = 0;
+  for (const c of clouds) {
+    const rx = c.w / 2, ry = c.w * .27, q = ((sun.x - c.x) / rx) ** 2 + ((sun.y - c.y) / ry) ** 2;
+    cover = Math.max(cover, clamp((1.1 - q) / .45, 0, 1));
+  }
+  return 1 - cover * .97;
+}
+function shadeAt(px, py, d, list, light) { return light < .35 || blocked(px, py, d, list); }
+
+// ---------- simulation ----------
+const STEP = 1 / 120;
+const SUN_SPEED = 1500; // px/s on screen
+function moveSun(sun, dt) {
+  const dx = sun.tx - sun.x, dy = sun.ty - sun.y, dist = Math.hypot(dx, dy);
+  if (dist > .5) {
+    const v = Math.min(SUN_SPEED * dt, dist * Math.min(1, dt * 9));
+    sun.x += dx / dist * v; sun.y += dy / dist * v;
+  }
+  clampSun(sun, 'x', 'y');
+}
+function clampSun(o, kx, ky) {
+  o[ky] = clamp(o[ky], -OY + 120, G - 170); // stays below the HUD
+  o[kx] = clamp(o[kx], 40, VW - 40);
+}
+function vampPoints(x) { return [[x - 7, G - 12], [x + 5, G - 44], [x, G - 74]]; }
+
+function step(dt) {
+  S.t += dt;
+  const v = S.vamp;
+  moveSun(S.sun, dt);
+  if (S.mode !== 'play') {
+    if (S.mode === 'dead') v.deadT += dt;
+    return;
+  }
+  const d = sunDir(S.sun), list = casters(S.t), clouds = cloudsAt(S.t);
+  S.light = sunLight(S.sun, clouds);
+  // vampire
+  if (!S.started) return;
+  if (S.startT === undefined) S.startT = S.t;
+  if (!v.wait) { v.x += WALK * dt; v.phase += dt * 7; }
+  let litN = 0;
+  for (const [px, py] of vampPoints(v.x)) if (!shadeAt(px, py, d, list, S.light)) litN++;
+  v.lit = litN / 3 * S.light;
+  if (v.lit > 0) v.burn += v.lit * .62 * dt; else v.burn = Math.max(0, v.burn - .1 * dt);
+  if (v.lit > 0 && Math.random() < v.lit * 1.4) S.parts.push(smoke(v.x + (Math.random() - .5) * 26, G - 30 - Math.random() * 50));
+  if (v.burn >= 1) return die();
+  if (v.x >= lv.home.x + 70) return win();
+  // flowers bloom in the light, but only where the player can see them
+  lv.flowers.forEach((f, i) => {
+    if (S.got[i]) return;
+    const sx = f.x - S.camX; if (sx < -30 || sx > VW + 30) return;
+    if (!shadeAt(f.x, f.y - 46, d, list, S.light)) {
+      S.bloom[i] = Math.min(1, S.bloom[i] + dt / 1.1);
+      if (S.bloom[i] >= 1) { S.got[i] = true; Audio.star(); for (let k = 0; k < 14; k++) S.parts.push(sparkle(f.x, f.y - 50)); }
+    }
+  });
+  // camera keeps the vampire at a third of the screen
+  const target = clamp(v.x - VW * .34, 0, Math.max(0, lv.length + 160 - VW));
+  S.camX = lerp(S.camX, target, Math.min(1, dt * 4));
+  if (DEBUG_BOT) bot(dt);
+}
+function die() {
+  S.mode = 'dead'; S.vamp.deadT = 0; S.shake = 1;
+  Audio.poof(); Audio.sizzle(0);
+  for (let k = 0; k < 40; k++) S.parts.push(ash(S.vamp.x, G - 40));
+  Portal.stop();
+}
+function win() {
+  S.mode = 'win'; S.winT = 0;
+  Audio.win(); Audio.sizzle(0);
+  const stars = S.got.filter(Boolean).length;
+  save.stars[lv.n] = Math.max(save.stars[lv.n] || 0, stars);
+  if (lv.n >= save.unlocked) save.unlocked = Math.min(LEVELS, lv.n + 1);
+  persist();
+  Portal.stop(); if (stars === 3) Portal.happy();
+  setTimeout(() => showWin(stars), 900);
+}
+
+// ---------- particles ----------
+const smoke = (x, y) => ({ k: 'smoke', x, y, vx: (Math.random() - .5) * 20, vy: -40 - Math.random() * 40, life: 0, max: .9 + Math.random() * .5, r: 6 + Math.random() * 6 });
+const sparkle = (x, y) => ({ k: 'spark', x, y, vx: (Math.random() - .5) * 260, vy: -Math.random() * 260, life: 0, max: .8, r: 4 });
+const ash = (x, y) => ({ k: 'ash', x, y, vx: (Math.random() - .5) * 220, vy: -Math.random() * 260, life: 0, max: 1.4, r: 3 + Math.random() * 4 });
+function updateParts(dt) {
+  for (const p of S.parts) {
+    p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.k === 'smoke') { p.r += dt * 14; p.vx *= .98; }
+    else { p.vy += 600 * dt; if (p.y > G + 10) { p.y = G + 10; p.vy *= -.3; p.vx *= .6; } }
+  }
+  S.parts = S.parts.filter((p) => p.life < p.max);
+}
+
+// ---------- input ----------
+const pointers = new Map();
+let usingKeys = false;
+function toView(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale - OY]; }
+function waitBtn() { return { x: VW - 92, y: 720 - 92 + Math.min(OY, 0), r: 62 }; }
+function onWait(x, y) { const b = waitBtn(); return Math.hypot(x - b.x, y - b.y) < b.r + 10; }
+cv.addEventListener('pointerdown', (e) => {
+  Audio.init();
+  const [x, y] = toView(e);
+  if (S.mode === 'dead' && S.vamp.deadT > .5) { startLevel(lv.n); return; }
+  if (S.mode !== 'play') return;
+  if (onWait(x, y)) { pointers.set(e.pointerId, 'wait'); S.vamp.wait = true; Audio.click(); }
+  else { pointers.set(e.pointerId, 'sun'); S.sun.tx = x; S.sun.ty = y; cv.classList.add('dragging'); S.dragged = true; }
+  S.started = true;
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', (e) => {
+  const [x, y] = toView(e), role = pointers.get(e.pointerId);
+  // a mouse moves the sun without holding a button; touch needs a finger down
+  if (role === 'sun' || (e.pointerType === 'mouse' && role !== 'wait' && !onWait(x, y))) {
+    if (S && S.mode === 'play') { S.sun.tx = x; S.sun.ty = y; usingKeys = false; if (e.pointerType === 'mouse' && Math.hypot(x - S.sun.x, y - S.sun.y) < 400) { S.dragged = true; S.started = true; } }
+  }
+});
+const release = (e) => {
+  const role = pointers.get(e.pointerId); pointers.delete(e.pointerId);
+  if (role === 'wait' && ![...pointers.values()].includes('wait')) S.vamp.wait = keys.has('wait');
+  cv.classList.remove('dragging');
+};
+cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release);
+const keys = new Set();
+addEventListener('keydown', (e) => {
+  Audio.init();
+  const k = e.code;
+  if (k === 'Space' || k === 'ShiftLeft' || k === 'ShiftRight' || k === 'KeyS' || k === 'ArrowDown') {
+    e.preventDefault(); keys.add('wait');
+    if (S.mode === 'play') { S.vamp.wait = true; S.started = true; }
+    else if (S.mode === 'dead' && S.vamp.deadT > .5) startLevel(lv.n);
+  }
+  if (k === 'ArrowLeft' || k === 'KeyA') { keys.add('left'); e.preventDefault(); }
+  if (k === 'ArrowRight' || k === 'KeyD') { keys.add('right'); e.preventDefault(); }
+  if (k === 'KeyR' && S.mode !== 'win') startLevel(lv.n);
+  if (k === 'KeyP') togglePause();
+  if (k === 'Enter' && $('win').classList.contains('on')) $('nextBtn').click();
+});
+addEventListener('keyup', (e) => {
+  const k = e.code;
+  if (k === 'Space' || k === 'ShiftLeft' || k === 'ShiftRight' || k === 'KeyS' || k === 'ArrowDown') { keys.delete('wait'); if (![...pointers.values()].includes('wait')) S.vamp.wait = false; }
+  if (k === 'ArrowLeft' || k === 'KeyA') keys.delete('left');
+  if (k === 'ArrowRight' || k === 'KeyD') keys.delete('right');
+});
+function keySun(dt) {
+  // arrow keys swing the sun along an arc
+  if (!keys.has('left') && !keys.has('right')) return;
+  usingKeys = true; S.dragged = true; S.started = true;
+  const sun = S.sun;
+  sun.tx = clamp(sun.tx + (keys.has('left') ? -1 : 1) * VW * .7 * dt, 40, VW - 40);
+  // follow a gentle arc so the sun looks natural when steered by keys
+  const f = (sun.tx - VW / 2) / (VW / 2);
+  sun.ty = 120 + f * f * 280;
+}
+
+// ---------- debug bot: plays by looking ahead (used to verify levels: ?bot) ----------
+let botNext = 0, botWaited = 0;
+function bot() {
+  if (S.t < botNext) return; botNext = S.t + .1;
+  const v = S.vamp, cands = [];
+  for (let i = 0; i <= 24; i++) cands.push({ x: 60 + (VW - 120) * i / 24, y: 200 });
+  for (const c of cloudsAt(S.t)) cands.push({ x: c.x, y: c.y });
+  let best = null;
+  for (const c of cands) for (const wait of [false, true]) {
+    const sun = { x: S.sun.x, y: S.sun.y, tx: c.x, ty: c.y };
+    let x = v.x, burn = 0, bloom = 0;
+    for (let t = 0; t < 3; t += .05) {
+      const tt = S.t + t; moveSun(sun, .05);
+      const d = sunDir(sun), list = casters(tt), light = sunLight(sun, cloudsAt(tt));
+      if (!wait) x += WALK * .05;
+      for (const [px, py] of vampPoints(x)) if (!shadeAt(px, py, d, list, light)) burn += light * (t < .5 ? 2 : t < 1.5 ? 1 : .5);
+      lv.flowers.forEach((f, i) => { const sx = f.x - S.camX; if (!S.got[i] && sx > -30 && sx < VW + 30 && !shadeAt(f.x, f.y - 46, d, list, light)) bloom++; });
+    }
+    // progress always beats flowers; flowers only break ties between safe options
+    // waiting gets more expensive the longer it lasts, so the bot accepts a short burn to swing the sun
+    const score = burn * 10 - (wait ? 0 : 6) + (wait ? botWaited * 6 : 0) - Math.min(bloom, 30) * .1;
+    if (!best || score < best.score) best = { score, c, wait };
+  }
+  S.sun.tx = best.c.x; S.sun.ty = best.c.y; v.wait = best.wait;
+  botWaited = best.wait ? botWaited + .1 : Math.max(0, botWaited - .02); // decays slowly so it commits to a move
+}
+
+// ---------- drawing ----------
+function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function hull(pts) {
+  pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function shapePoints(c) {
+  if (c.type === 'r') return [[c.x1, c.y1], [c.x2, c.y1], [c.x1, c.y2], [c.x2, c.y2]];
+  const out = []; for (let i = 0; i < 16; i++) out.push([c.cx + Math.cos(i / 16 * 6.283) * c.r, c.cy + Math.sin(i / 16 * 6.283) * c.r]);
+  return out;
+}
+const proj = (p, d) => [p[0] - (G - p[1]) * d.dx / -d.dy, G];
+
+function drawSky(d) {
+  const elev = Math.sin(d.a);
+  const top = `hsl(${lerp(28, 205, elev)} ${lerp(80, 70, elev)}% ${lerp(78, 72, elev)}%)`;
+  const bot = `hsl(${lerp(22, 45, elev)} 95% ${lerp(80, 88, elev)}%)`;
+  const gr = g.createLinearGradient(0, -OY, 0, G);
+  gr.addColorStop(0, top); gr.addColorStop(1, bot);
+  g.fillStyle = gr; g.fillRect(0, -OY, VW, G + OY + 2);
+}
+function drawSun(t) {
+  const s = S.sun, lit = S.light;
+  const gl = g.createRadialGradient(s.x, s.y, 10, s.x, s.y, 120);
+  gl.addColorStop(0, `rgba(255,236,150,${.65 * lit})`); gl.addColorStop(1, 'rgba(255,236,150,0)');
+  g.fillStyle = gl; g.beginPath(); g.arc(s.x, s.y, 120, 0, 7); g.fill();
+  g.save(); g.translate(s.x, s.y); g.rotate(t * .4);
+  g.fillStyle = `rgba(255,190,60,${.5 + .5 * lit})`;
+  for (let i = 0; i < 12; i++) { g.rotate(Math.PI / 6); g.beginPath(); g.moveTo(-7, 46); g.lineTo(0, 64); g.lineTo(7, 46); g.fill(); }
+  g.restore();
+  g.fillStyle = '#ffcf4a'; g.beginPath(); g.arc(s.x, s.y, 40, 0, 7); g.fill();
+  g.fillStyle = '#ffe58a'; g.beginPath(); g.arc(s.x - 9, s.y - 9, 22, 0, 7); g.fill();
+  // a sleepy face: the sun is the "villain", but a friendly one
+  g.fillStyle = '#7a4a12';
+  g.beginPath(); g.arc(s.x - 13, s.y - 2, 4, 0, 7); g.arc(s.x + 13, s.y - 2, 4, 0, 7); g.fill();
+  g.strokeStyle = '#7a4a12'; g.lineWidth = 3; g.beginPath(); g.arc(s.x, s.y + 8, 9, .2, Math.PI - .2); g.stroke();
+}
+function drawClouds(clouds) {
+  for (const c of clouds) {
+    const w = c.w, h = w * .32;
+    g.fillStyle = 'rgba(80,60,90,.08)'; g.beginPath(); g.ellipse(c.x + 8, c.y + 12, w / 2, h / 2, 0, 0, 7); g.fill();
+    g.fillStyle = '#fffaf3';
+    for (const [ox, oy, rr2] of [[-.3, .1, .26], [-.08, -.12, .32], [.2, -.02, .28], [.36, .14, .2], [0, .18, .3]]) {
+      g.beginPath(); g.arc(c.x + ox * w, c.y + oy * w * .9, rr2 * w * .62, 0, 7); g.fill();
+    }
+  }
+}
+function drawBackdrop() {
+  // far hills and skyline, parallax
+  g.fillStyle = '#f0c9a8';
+  g.beginPath(); g.moveTo(0, G);
+  for (let x = 0; x <= VW + 40; x += 40) { const wx = x + S.camX * .15; g.lineTo(x, G - 120 - Math.sin(wx * .004) * 40 - Math.sin(wx * .011) * 18); }
+  g.lineTo(VW, G); g.fill();
+  g.fillStyle = '#e8b9a0';
+  const off = S.camX * .35;
+  for (let i = Math.floor(off / 90) - 1; i < (off + VW) / 90 + 1; i++) {
+    const h = 70 + (Math.abs(Math.sin(i * 91.7)) * 110), x = i * 90 - off;
+    g.fillRect(x, G - h, 70, h);
+    if (i % 3 === 0) { g.beginPath(); g.moveTo(x, G - h); g.lineTo(x + 35, G - h - 30); g.lineTo(x + 70, G - h); g.fill(); }
+  }
+}
+function drawStreet() {
+  g.fillStyle = '#d9cbb8'; g.fillRect(0, G, VW, 46);
+  g.fillStyle = '#c7b7a2'; g.fillRect(0, G + 44, VW, 6);
+  g.fillStyle = '#5d566b'; g.fillRect(0, G + 50, VW, 720 - G);
+  g.fillStyle = 'rgba(255,255,255,.5)';
+  const off = S.camX % 120;
+  for (let x = -off; x < VW; x += 120) g.fillRect(x, G + 92, 60, 6);
+  if (lv.trams) { g.fillStyle = '#3f3a4c'; g.fillRect(0, G + 60, VW, 4); g.fillRect(0, G + 78, VW, 4); }
+  // paving lines
+  g.fillStyle = 'rgba(0,0,0,.05)';
+  for (let x = -(S.camX % 60); x < VW; x += 60) g.fillRect(x, G, 2, 44);
+}
+function drawBuilding(b) {
+  const x = b.x - S.camX, y = G - b.h;
+  if (x > VW + 40 || x + b.w < -40) return;
+  g.fillStyle = b.color[0]; g.fillRect(x, y, b.w, b.h);
+  g.fillStyle = 'rgba(0,0,0,.06)'; g.fillRect(x + b.w - 14, y, 14, b.h);
+  // roof
+  g.fillStyle = b.color[1];
+  if (b.roof === 'gable') { g.beginPath(); g.moveTo(x - 12, y + 2); g.lineTo(x + b.w / 2, y - Math.min(70, b.w * .28)); g.lineTo(x + b.w + 12, y + 2); g.fill(); }
+  else { g.fillRect(x - 8, y - 12, b.w + 16, 14); if (b.roof === 'chimney') g.fillRect(x + b.w * .7, y - 46, 26, 36); }
+  // windows
+  const cols = Math.max(2, Math.floor((b.w - 30) / 58)), rows = Math.max(1, Math.floor((b.h - 110) / 70));
+  const gx = (b.w - 30) / cols;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const wx = x + 15 + c * gx + gx / 2 - 15, wy = y + 26 + r * 70;
+    g.fillStyle = '#fff6e6'; rr(wx - 4, wy - 4, 38, 48, 8); g.fill();
+    g.fillStyle = (r + c + b.win) % 4 === 0 ? '#ffe39a' : '#8fb7d9'; rr(wx, wy, 30, 40, 6); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(wx + 4, wy + 4, 6, 14);
+  }
+  // ground floor: shop front with a door
+  g.fillStyle = b.color[1]; g.fillRect(x, G - 86, b.w, 8);
+  g.fillStyle = '#6e4f5e'; rr(x + b.w / 2 - 22, G - 72, 44, 72, [18, 18, 0, 0]); g.fill();
+  g.fillStyle = '#ffd36a'; g.beginPath(); g.arc(x + b.w / 2 + 12, G - 34, 3, 0, 7); g.fill();
+}
+function drawHome() {
+  const h = lv.home, x = h.x - S.camX, y = G - h.h;
+  g.fillStyle = '#5b4a7a'; g.fillRect(x, y, h.w, h.h);
+  g.fillStyle = '#463862';
+  g.beginPath(); g.moveTo(x - 20, y + 4); g.lineTo(x + h.w / 2, y - 110); g.lineTo(x + h.w + 20, y + 4); g.fill();
+  g.fillStyle = '#ffe28a'; g.beginPath(); g.arc(x + h.w / 2, y - 30, 22, 0, 7); g.fill();
+  g.fillStyle = '#463862'; g.fillRect(x + h.w / 2 - 2, y - 52, 4, 44); g.fillRect(x + h.w / 2 - 22, y - 32, 44, 4);
+  const open = S.mode === 'win' ? clamp(S.winT * 2, 0, 1) : 0;
+  g.fillStyle = '#2a1f3d'; rr(x + 70, G - 120, 80, 120, [40, 40, 0, 0]); g.fill();
+  g.fillStyle = '#8a6a4a'; rr(x + 70 + open * 60, G - 120, 80 - open * 60, 120, [40, 40, 0, 0]); g.fill();
+  g.fillStyle = '#fffaf1'; rr(x + 170, G - 150, 74, 30, 8); g.fill();
+  g.fillStyle = '#463862'; g.font = `700 18px ${FONT}`; g.textAlign = 'center'; g.fillText('HOME', x + 207, G - 129);
+}
+function drawTree(tr) {
+  const x = tr.x - S.camX; if (x < -80 || x > VW + 80) return;
+  g.fillStyle = '#8a5a3c'; g.fillRect(x - 6, G - tr.trunk, 12, tr.trunk);
+  const cy = G - tr.trunk - tr.r * .7;
+  g.fillStyle = '#5fae6a'; g.beginPath(); g.arc(x, cy, tr.r, 0, 7); g.fill();
+  g.fillStyle = '#79c784'; g.beginPath(); g.arc(x - tr.r * .3, cy - tr.r * .3, tr.r * .55, 0, 7); g.fill();
+}
+function drawAwning(a) {
+  const x = a.x - S.camX; if (x < -80 || x > VW + 80) return;
+  for (let i = 0; i < 5; i++) { g.fillStyle = i % 2 ? '#fffaf1' : a.color; g.fillRect(x + i * a.w / 5, a.y, a.w / 5 + .5, a.h + 8); }
+}
+function drawTram(tm) {
+  const x = tm.x - S.camX, y = G - 18 - tm.h; if (x > VW + 40 || x + tm.w < -40) return;
+  g.fillStyle = '#f2c14e'; rr(x, y, tm.w, tm.h, 22); g.fill();
+  g.fillStyle = '#e0a93a'; g.fillRect(x, y + tm.h - 34, tm.w, 16);
+  g.fillStyle = '#fff6e6';
+  for (let i = 0; i < 5; i++) { rr(x + 18 + i * 56, y + 22, 42, 50, 8); g.fill(); }
+  g.fillStyle = '#3f3a4c'; g.fillRect(x + tm.w / 2 - 2, y - 40, 4, 40); g.fillRect(x + tm.w / 2 - 40, y - 42, 80, 4);
+  g.beginPath(); g.arc(x + 50, G - 14, 12, 0, 7); g.arc(x + tm.w - 50, G - 14, 12, 0, 7); g.fill();
+}
+function drawFlower(f, i) {
+  const x = f.x - S.camX, y = f.y; if (x < -40 || x > VW + 40) return;
+  const b = S.bloom[i], got = S.got[i];
+  g.strokeStyle = '#5c9a4c'; g.lineWidth = 5; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 6, y - 24, x, y - 44); g.stroke();
+  g.fillStyle = '#6fb35d'; g.beginPath(); g.ellipse(x + 9, y - 22, 9, 4, -.5, 0, 7); g.fill();
+  const open = got ? 1 : b * .6;
+  const pr = 8 + 12 * open;
+  g.fillStyle = '#ffcd3c';
+  for (let k = 0; k < 10; k++) { const a = k / 10 * 6.283 + (got ? S.t : 0) * .5; g.beginPath(); g.ellipse(x + Math.cos(a) * pr * .75, y - 50 + Math.sin(a) * pr * .75, pr * .45, pr * .22, a, 0, 7); g.fill(); }
+  g.fillStyle = got ? '#7a4a12' : '#5c9a4c'; g.beginPath(); g.arc(x, y - 50, 6 + 4 * open, 0, 7); g.fill();
+  if (!got && b > 0) { g.strokeStyle = '#ff8a3d'; g.lineWidth = 4; g.beginPath(); g.arc(x, y - 50, 26, -Math.PI / 2, -Math.PI / 2 + b * 6.283); g.stroke(); }
+}
+function drawVampire() {
+  const v = S.vamp, x = v.x - S.camX;
+  if (S.mode === 'dead') {
+    g.fillStyle = '#8f8798'; g.beginPath(); g.ellipse(x, G - 4, 26, 8, 0, 0, 7); g.fill();
+    // a little bat escapes
+    const t = v.deadT, bx = x + t * 140, by = G - 60 - t * 160 + Math.sin(t * 20) * 8;
+    if (t < 3) {
+      g.fillStyle = '#3b2a52'; g.beginPath(); g.arc(bx, by, 8, 0, 7); g.fill();
+      const f = Math.sin(t * 30) * 10;
+      g.beginPath(); g.moveTo(bx - 6, by); g.lineTo(bx - 26, by - 8 + f); g.lineTo(bx - 16, by + 4); g.fill();
+      g.beginPath(); g.moveTo(bx + 6, by); g.lineTo(bx + 26, by - 8 + f); g.lineTo(bx + 16, by + 4); g.fill();
+    }
+    return;
+  }
+  if (S.mode === 'win' && S.winT > .5) return;
+  const walk = v.wait ? 0 : Math.sin(v.phase), crouch = v.wait ? 10 : 0, bob = Math.abs(walk) * 3;
+  const burn = v.lit > 0 ? 1 : 0, shakeX = burn ? (Math.random() - .5) * 3 : 0;
+  g.save(); g.translate(x + shakeX, G - bob + crouch * .3);
+  // shadow on the pavement
+  g.fillStyle = 'rgba(0,0,0,.18)'; g.beginPath(); g.ellipse(0, 4 - bob + crouch * .3, 20, 5, 0, 0, 7); g.fill();
+  // legs
+  g.strokeStyle = '#2a2236'; g.lineWidth = 7; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(-5, -26); g.lineTo(-5 + walk * 8, 0); g.moveTo(5, -26); g.lineTo(5 - walk * 8, 0); g.stroke();
+  // cape
+  g.fillStyle = '#3b2a52';
+  g.beginPath(); g.moveTo(-14, -62 + crouch); g.quadraticCurveTo(-30 - walk * 4, -30, -24, -16); g.lineTo(22, -16); g.quadraticCurveTo(26, -40, 14, -62 + crouch); g.fill();
+  g.fillStyle = '#c23b55'; g.beginPath(); g.moveTo(-10, -60 + crouch); g.lineTo(0, -40); g.lineTo(10, -60 + crouch); g.fill();
+  // body
+  g.fillStyle = '#2a2236'; rr(-11, -60 + crouch, 22, 36, 8); g.fill();
+  // head
+  const hy = -78 + crouch * 1.4;
+  g.fillStyle = burn ? '#ffc9b8' : '#eef0f4'; g.beginPath(); g.arc(0, hy, 17, 0, 7); g.fill();
+  g.fillStyle = '#231a33';
+  g.beginPath(); g.moveTo(-18, hy - 2); g.quadraticCurveTo(-16, hy - 22, 0, hy - 20); g.quadraticCurveTo(16, hy - 22, 18, hy - 2); g.lineTo(9, hy - 10); g.lineTo(0, hy - 4); g.lineTo(-9, hy - 10); g.fill();
+  // face: worried when burning
+  g.fillStyle = '#231a33';
+  if (burn) { g.fillRect(-9, hy + 1, 6, 2); g.fillRect(4, hy + 1, 6, 2); }
+  else { g.beginPath(); g.arc(-6, hy + 2, 2.6, 0, 7); g.arc(7, hy + 2, 2.6, 0, 7); g.fill(); }
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(-4, hy + 9); g.lineTo(-2, hy + 14); g.lineTo(0, hy + 9); g.moveTo(2, hy + 9); g.lineTo(4, hy + 14); g.lineTo(6, hy + 9); g.fill();
+  if (v.wait) { // cape pulled over the head
+    g.fillStyle = '#3b2a52'; g.beginPath(); g.moveTo(-26, hy + 6); g.quadraticCurveTo(0, hy - 40, 26, hy + 6); g.quadraticCurveTo(0, hy - 18, -26, hy + 6); g.fill();
+  }
+  g.restore();
+}
+function drawShadows(d, list) {
+  const lit = S.light;
+  if (lit < .05) return;
+  g.save(); g.translate(-S.camX, 0);
+  // soft shadow volumes in the air, then the stronger patch on the pavement
+  g.fillStyle = `rgba(48,30,80,${.13 * lit})`;
+  for (const c of list) {
+    const pts = shapePoints(c); const all = pts.concat(pts.map((p) => proj(p, d)));
+    const h = hull(all); g.beginPath(); h.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath(); g.fill();
+  }
+  g.fillStyle = `rgba(48,30,80,${.28 * lit})`;
+  for (const c of list) {
+    const xs = shapePoints(c).map((p) => proj(p, d)[0]);
+    const a = Math.min(...xs), b = Math.max(...xs);
+    g.fillRect(a, G, b - a, 46);
+  }
+  g.restore();
+}
+function drawParts() {
+  for (const p of S.parts) {
+    const k = 1 - p.life / p.max, x = p.x - S.camX;
+    if (p.k === 'smoke') { g.fillStyle = `rgba(120,110,130,${.45 * k})`; g.beginPath(); g.arc(x, p.y, p.r, 0, 7); g.fill(); }
+    else if (p.k === 'spark') { g.fillStyle = `rgba(255,205,60,${k})`; g.beginPath(); g.arc(x, p.y, p.r * k + 1, 0, 7); g.fill(); }
+    else { g.fillStyle = `rgba(110,100,120,${k})`; g.fillRect(x, p.y, p.r, p.r); }
+  }
+}
+function drawHud() {
+  const top = -OY + 14;
+  // level badge
+  g.fillStyle = 'rgba(255,250,241,.92)'; rr(14, top, 230, 48, 16); g.fill();
+  g.fillStyle = '#2b2140'; g.font = `700 21px ${FONT}`; g.textAlign = 'left';
+  g.fillText(`${lv.n}. ${lv.name}`, 30, top + 32);
+  // sunburn meter
+  const bw = Math.min(360, VW * .3), bx = VW / 2 - bw / 2;
+  g.fillStyle = 'rgba(255,250,241,.92)'; rr(bx - 46, top, bw + 62, 48, 16); g.fill();
+  g.font = '26px system-ui, "Apple Color Emoji", sans-serif'; g.fillText('🔥', bx - 38, top + 34);
+  g.fillStyle = '#f0e2cf'; rr(bx, top + 15, bw, 18, 9); g.fill();
+  const v = S.vamp.burn, col = v < .5 ? '#ffb347' : v < .8 ? '#ff7a3d' : '#ff3b4f';
+  if (v > 0) { g.fillStyle = col; rr(bx, top + 15, Math.max(18, bw * v), 18, 9); g.fill(); }
+  // flowers collected
+  const fx = VW - 80 - 3 * 46;
+  g.fillStyle = 'rgba(255,250,241,.92)'; rr(fx - 12, top, 3 * 46 + 12, 48, 16); g.fill();
+  for (let i = 0; i < 3; i++) {
+    g.globalAlpha = S.got[i] ? 1 : .25; g.font = '28px system-ui, "Apple Color Emoji", sans-serif'; g.fillText('🌻', fx + i * 44, top + 35); g.globalAlpha = 1;
+  }
+  // WAIT button
+  const b = waitBtn(), on = S.vamp.wait;
+  g.fillStyle = on ? '#2b2140' : 'rgba(255,250,241,.92)'; g.beginPath(); g.arc(b.x, b.y, b.r, 0, 7); g.fill();
+  g.strokeStyle = '#2b2140'; g.lineWidth = 4; g.stroke();
+  g.fillStyle = on ? '#fff' : '#2b2140'; g.textAlign = 'center'; g.font = `700 22px ${FONT}`; g.fillText('WAIT', b.x, b.y + 2);
+  g.font = `500 13px ${FONT}`; g.fillText(matchMedia('(pointer: fine)').matches ? 'hold SPACE' : 'hold', b.x, b.y + 22);
+}
+function drawTip() {
+  if (S.mode === 'play' && !S.started && lv.tip !== 'drag') {
+    g.font = `600 26px ${FONT}`; const text = 'Move the sun to start ☀️', w = g.measureText(text).width + 40, y = -OY + 92;
+    g.fillStyle = 'rgba(43,33,64,.88)'; rr(VW / 2 - w / 2, y, w, 50, 25); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(text, VW / 2, y + 34);
+    return;
+  }
+  const tip = lv.tip;
+  if (VH > VW && S.t < 5) { // tall phone: suggest landscape once per level
+    g.font = `600 30px ${FONT}`; const text = 'Best in landscape 🔄', w = g.measureText(text).width + 40, y = G - 330;
+    g.fillStyle = 'rgba(43,33,64,.8)'; rr(VW / 2 - w / 2, y, w, 54, 27); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(text, VW / 2, y + 37);
+  }
+  if (!tip || S.mode !== 'play') return;
+  const msgs = {
+    drag: 'Drag the sun ☀️ to move the shadows', wait: 'Hold WAIT to stop in the shade',
+    flowers: 'Sunflowers 🌻 need sun. Light them up!', tram: 'Trams cast shade too. WAIT for one 🚋', cloud: 'Hide the sun behind a cloud ☁️',
+  };
+  const since = S.t - (S.startT ?? S.t);
+  const show = tip === 'drag' ? !S.dragged || since < 4 : since < 7;
+  if (!show) return;
+  const a = tip === 'drag' && !S.dragged ? 1 : clamp(((tip === 'drag' ? 4 : 7) - since) / 1.5, 0, 1);
+  g.globalAlpha = a;
+  const text = msgs[tip];
+  g.font = `600 26px ${FONT}`; const w = g.measureText(text).width + 40;
+  const y = -OY + 92;
+  g.fillStyle = 'rgba(43,33,64,.88)'; rr(VW / 2 - w / 2, y, w, 50, 25); g.fill();
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(text, VW / 2, y + 34);
+  if (tip === 'drag' && !S.dragged) {
+    // animated hand dragging the sun back and forth
+    const k = (Math.sin(S.t * 2) + 1) / 2, hx = lerp(VW * .3, VW * .7, k), hy = 230 - Math.sin(k * Math.PI) * 60;
+    g.font = '54px system-ui, "Apple Color Emoji", sans-serif'; g.fillText('👆', hx, hy + 70);
+  }
+  g.globalAlpha = 1;
+}
+function drawDead() {
+  if (S.mode !== 'dead' || S.vamp.deadT < .4) return;
+  const a = clamp((S.vamp.deadT - .4) / .3, 0, 1);
+  g.globalAlpha = a;
+  g.fillStyle = 'rgba(43,33,64,.9)'; rr(VW / 2 - 230, 230, 460, 140, 28); g.fill();
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = `700 40px ${FONT}`; g.fillText('Too sunny! ☀️', VW / 2, 292);
+  g.font = `500 22px ${FONT}`; g.fillText(matchMedia('(pointer: fine)').matches ? 'click or press SPACE to retry' : 'tap to retry', VW / 2, 338);
+  g.globalAlpha = 1;
+}
+
+function render(clean) {
+  const d = sunDir(S.sun), list = casters(S.t), clouds = cloudsAt(S.t);
+  g.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+  g.translate(0, OY);
+  if (S.shake > 0) { g.translate((Math.random() - .5) * 12 * S.shake, (Math.random() - .5) * 8 * S.shake); }
+  drawSky(d);
+  drawSun(S.t);
+  drawClouds(clouds); // clouds pass in front of the sun
+  drawBackdrop();
+  drawStreet();
+  for (const b of lv.buildings) drawBuilding(b);
+  drawHome();
+  for (const tm of tramsAt(S.t)) drawTram(tm);
+  for (const a of lv.awnings) drawAwning(a);
+  for (const tr of lv.trees) drawTree(tr);
+  drawShadows(d, list);
+  lv.flowers.forEach(drawFlower);
+  drawVampire();
+  drawParts();
+  // warm tint while burning
+  if (S.vamp.lit > 0 && S.mode === 'play') { g.fillStyle = `rgba(255,120,40,${.08 + S.vamp.burn * .12})`; g.fillRect(0, -OY, VW, 720 + OY); }
+  if (clean) return; // covers and previews skip the HUD
+  drawHud();
+  drawTip();
+  drawDead();
+}
+
+// ---------- loop ----------
+let last = performance.now(), acc = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.1, (now - last) / 1000); last = now;
+  if (!S || captureMode) return;
+  const paused = $('pause').classList.contains('on') || adPause;
+  if (!paused) {
+    acc += dt;
+    while (acc >= STEP) { keySun(STEP); step(STEP); acc -= STEP; }
+    updateParts(dt);
+    S.shake = Math.max(0, S.shake - dt * 3);
+    if (S.mode === 'win') S.winT += dt;
+    Audio.sizzle(S.mode === 'play' ? S.vamp.lit : 0);
+  }
+  Audio.music(!paused && !save.mute);
+  render();
+}
+
+// ---------- menus ----------
+let adPause = false;
+function hideOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.classList.remove('on')); }
+function togglePause() {
+  if (!S || S.mode === 'win') return;
+  const p = $('pause');
+  if (p.classList.contains('on')) { p.classList.remove('on'); if (S.mode === 'play') Portal.start(); }
+  else { hideOverlays(); p.classList.add('on'); Portal.stop(); Audio.sizzle(0); }
+}
+$('pauseBtn').addEventListener('click', () => { Audio.init(); togglePause(); });
+function showWin(stars) {
+  $('winStars').innerHTML = [0, 1, 2].map((i) => `<span class="${i < stars ? '' : 'off'}" style="animation-delay:${.1 + i * .15}s">🌻</span>`).join('');
+  $('winTitle').textContent = stars === 3 ? 'Perfect stroll!' : 'Home safe!';
+  $('winText').textContent = stars === 3 ? 'Every sunflower bloomed.' : `${stars} of 3 sunflowers bloomed.`;
+  $('nextBtn').style.display = lv.n < LEVELS ? '' : 'none';
+  if (lv.n >= LEVELS) $('winText').textContent += ' You finished every district!';
+  $('win').classList.add('on');
+}
+function buildLevelGrid() {
+  const box = $('levelGrid'); box.innerHTML = '';
+  DISTRICTS.forEach((name, di) => {
+    const h = document.createElement('div'); h.className = 'district'; h.textContent = name; box.appendChild(h);
+    const grid = document.createElement('div'); grid.className = 'grid';
+    for (let n = di * 10 + 1; n <= di * 10 + 10; n++) {
+      const b = document.createElement('button'); b.className = 'lv' + (n === lv.n ? ' cur' : '');
+      b.disabled = n > save.unlocked;
+      const st = save.stars[n] || 0;
+      b.innerHTML = `${n > save.unlocked ? '🔒' : n}<small>${st ? '★'.repeat(st) : ''}</small>`;
+      b.addEventListener('click', () => { Audio.click(); startLevel(n); });
+      grid.appendChild(b);
+    }
+    box.appendChild(grid);
+  });
+}
+document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => {
+  Audio.init(); Audio.click();
+  const act = b.dataset.act;
+  if (act === 'resume') togglePause();
+  if (act === 'restart') startLevel(lv.n);
+  if (act === 'levels') { hideOverlays(); buildLevelGrid(); $('levels').classList.add('on'); Portal.stop(); }
+  if (act === 'close-levels') { hideOverlays(); if (S.mode === 'play') Portal.start(); else if (S.mode === 'win') $('win').classList.add('on'); }
+  if (act === 'sound') { save.mute = !save.mute; persist(); Audio.setMute(save.mute); $('soundBtn').textContent = 'Sound: ' + (save.mute ? 'off' : 'on'); }
+  if (act === 'next') {
+    const n = lv.n + 1;
+    // a short break between levels, never in the first few
+    if (n >= 4 && n % 3 === 1) {
+      hideOverlays();
+      Portal.break(() => { adPause = true; Audio.suspend(); }, () => { adPause = false; Audio.resume(); }).then(() => startLevel(n));
+    } else startLevel(n);
+  }
+}));
+$('soundBtn').textContent = 'Sound: ' + (save.mute ? 'off' : 'on');
+document.addEventListener('visibilitychange', () => { if (document.hidden && S && S.mode === 'play' && !$('pause').classList.contains('on')) togglePause(); });
+
+// players land straight in gameplay
+startLevel(Math.min(save.current || 1, save.unlocked));
+Portal.loaded();
+requestAnimationFrame(frame);
+// ---------- capture (?bot only): portal covers and preview videos, rendered offline ----------
+let captureMode = false;
+function setView(w, h) {
+  captureMode = true; dpr = 1;
+  scale = w / h >= 16 / 9 ? h / 720 : Math.max(w / 1280, Math.min(w / (w < h ? 700 : 900), h / 720));
+  VW = w / scale; VH = h / scale; OY = VH - 720;
+  cv.width = w; cv.height = h; cv.style.width = (w / 4) + 'px'; cv.style.height = (h / 4) + 'px';
+}
+function drawTitle(cx, cy, size) {
+  g.save(); g.textAlign = 'center'; g.lineJoin = 'round';
+  g.font = `700 ${size}px ${FONT}`;
+  g.lineWidth = size * .22; g.strokeStyle = '#2b2140'; g.strokeText('SHADEWALK', cx, cy);
+  const gr = g.createLinearGradient(0, cy - size, 0, cy); gr.addColorStop(0, '#ffe58a'); gr.addColorStop(1, '#ff9a3d');
+  g.fillStyle = gr; g.fillText('SHADEWALK', cx, cy);
+  g.restore();
+}
+async function postCanvas(name, type = 'image/jpeg', q = .92) {
+  const b = await new Promise((r) => cv.toBlob(r, type, q));
+  await fetch('http://127.0.0.1:8771/save/' + (name.includes('/') ? 'shadewalk-' + name.split('/')[0] + '/' + name.split('/')[1] : 'shadewalk-media/' + name), { method: 'POST', body: b });
+}
+// a posed scene: low sun, long shadows, the vampire safe in the shade, a sunflower in bloom
+function poseCover(n) {
+  startLevel(n); S.started = true; hideOverlays();
+  S.sun.x = S.sun.tx = VW * .16; S.sun.y = S.sun.ty = 170;
+  // stand clear of trees so the silhouette reads, every sunflower in bloom
+  const tree = lv.trees.find((t) => t.x > lv.gaps[0].x0 && t.x < lv.gaps[0].x1);
+  S.vamp.x = tree && tree.x - lv.gaps[0].x0 < 200 ? tree.x + 110 : lv.gaps[0].x0 + 60;
+  S.camX = Math.max(0, S.vamp.x - VW * .42);
+  S.got = S.got.map(() => true); S.bloom = S.got.map(() => 1);
+}
+async function covers() {
+  for (const [name, w, h] of [['cover-landscape', 1920, 1080], ['cover-portrait', 800, 1200], ['cover-square', 800, 800]]) {
+    setView(w, h); poseCover(4);
+    for (let i = 0; i < 30; i++) step(STEP);
+    S.vamp.phase = .6; render(true);
+    g.setTransform(scale, 0, 0, scale, 0, 0);
+    drawTitle(VW / 2, Math.min(OY + 230, VH * .3), Math.min(150, VW * .13));
+    await postCanvas(name + '.png', 'image/png');
+  }
+  return 'covers saved';
+}
+// preview: 1 s on the cover, then the bot plays; silent, starts on the cover as portals ask
+async function preview(orient, n = 22, secs = 18) {
+  const [w, h] = orient === 'land' ? [1920, 1080] : [1080, 1620];
+  setView(w, h); poseCover(4);
+  for (let i = 0; i < 30; i++) step(STEP);
+  render(true); g.setTransform(scale, 0, 0, scale, 0, 0); drawTitle(VW / 2, Math.min(OY + 230, VH * .3), Math.min(150, VW * .13));
+  for (let f = 0; f < 30; f++) await postCanvas(`${orient}/frame_${String(f).padStart(5, '0')}.jpg`);
+  startLevel(n); S.started = true; botNext = 0; botWaited = 0;
+  for (let f = 30; f < secs * 30; f++) {
+    for (let k = 0; k < 4; k++) step(STEP);
+    updateParts(1 / 30); if (S.mode === 'win') S.winT += 1 / 30;
+    render(true);
+    await postCanvas(`${orient}/frame_${String(f).padStart(5, '0')}.jpg`);
+  }
+  return 'preview ' + orient + ' ' + S.mode;
+}
+window.__sw = { get S() { return S; }, get lv() { return lv; }, startLevel, casters, sunDir, cloudsAt, covers, preview,
+  // ?bot only: play level n headless at full speed and report the outcome
+  botRun(n) {
+    startLevel(n); S.started = true; botNext = 0; botWaited = 0;
+    while (S.mode === 'play' && S.t < 400) step(STEP);
+    const res = { n, result: S.mode, t: Math.round(S.t), stars: S.got.filter(Boolean).length, maxBurn: 0, x: Math.round(S.vamp.x), len: Math.round(lv.length) };
+    return res;
+  } };
+})();
+</script>
+</body>
+</html>
