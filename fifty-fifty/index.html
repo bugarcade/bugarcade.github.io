@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>FIFTY/FIFTY</title>
+<meta name="description" content="One swipe. Cut the shape exactly in half. Looks easy. It isn't.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #fdf6ec; --ink: #26213a; --muted: #8f86a0; --card: #fffdf8; --line: #eadfce; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "Fredoka", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  main { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .bar { width: min(560px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+  .bar h1 { font-size: 22px; font-weight: 600; flex: 1; text-align: center; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: var(--card); border: 2px solid var(--line); text-decoration: none; color: inherit; }
+  .portal .web-only { visibility: hidden; }
+  #task { font-size: 22px; font-weight: 600; text-align: center; line-height: 1.2; }
+  #task b { color: #ff6b4a; }
+  #tries { display: flex; gap: 8px; font-size: 22px; height: 28px; }
+  #tries span.used { opacity: .2; filter: grayscale(1); }
+  #stage { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+  #board { touch-action: none; display: block; cursor: crosshair; }
+  #hint { font-size: 16px; color: var(--muted); min-height: 22px; text-align: center; }
+  .controls { display: flex; gap: 10px; width: min(560px, 100%); justify-content: center; min-height: 54px; }
+  .btn { flex: 1; max-width: 220px; padding: 13px 10px; border-radius: 16px; font-size: 18px; font-weight: 600; background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #120f1c; }
+  .btn[hidden] { display: none; }
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(253, 246, 236, .86); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  .overlay.on { display: grid; }
+  .card { width: min(380px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 24px 22px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 20px 50px rgba(38, 33, 58, .18); animation: pop .35s cubic-bezier(.2, 1.5, .4, 1); max-height: calc(100vh - 32px); overflow-y: auto; }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } }
+  .card h2 { font-size: 32px; line-height: 1.1; }
+  .card p { font-size: 17px; color: var(--muted); }
+  .big { font-size: 56px; font-weight: 700; letter-spacing: -1px; }
+  .stars { font-size: 40px; letter-spacing: 6px; }
+  .stars .off { filter: grayscale(1) opacity(.25); }
+  .card .btn { width: 100%; max-width: none; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .grid { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .lv { aspect-ratio: 1; border-radius: 12px; background: #fff; border: 2px solid var(--line); font-size: 17px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .lv small { font-size: 9px; color: #e8a400; margin-top: 3px; height: 9px; letter-spacing: 1px; }
+  .lv:disabled { opacity: .35; cursor: default; }
+  .lv.cur { border-color: var(--ink); }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+  #toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 15px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 9; }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <a class="icon web-only" href="../" aria-label="More games">←</a>
+    <h1 id="title">Level 1</h1>
+    <button class="icon" id="bDaily" aria-label="Daily shape">📅</button>
+    <button class="icon" id="bLevels" aria-label="Levels">▦</button>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div id="task"></div>
+  <div id="tries"></div>
+  <div id="stage"><canvas id="board"></canvas></div>
+  <div id="hint"></div>
+  <div class="controls">
+    <button class="btn" id="bRetry" hidden>↻ Try again</button>
+    <button class="btn primary" id="bNext" hidden>Next →</button>
+  </div>
+</main>
+
+<div class="overlay" id="result"><div class="card">
+  <h2 id="rTitle">Nice cut!</h2>
+  <div class="big" id="rBig">49.8%</div>
+  <div class="stars" id="rStars"></div>
+  <p id="rText"></p>
+  <button class="btn primary" id="rNext">Next level →</button>
+  <div class="row"><button class="btn" id="rRetry">Replay</button><button class="btn" id="rShare">Share</button></div>
+</div></div>
+
+<div class="overlay" id="levels"><div class="card">
+  <h2>Levels</h2>
+  <div class="grid" id="grid"></div>
+  <button class="btn" id="lClose">Back</button>
+</div></div>
+<div id="toast"></div>
+<canvas id="fx"></canvas>
+
+<script src="../portal.js?v=2"></script>
+<script src="shapes.js"></script>
+<script>
+(() => {
+'use strict';
+const { level, daily, cutShape, transform, LEVELS } = window.Fifty;
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const TRIES = 3;
+
+// ---------- save ----------
+const save = { unlocked: 1, best: {}, current: 1, mute: false, daily: {} };
+const persist = () => Portal.storage.set('fifty', JSON.stringify(save));
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 11)) / 864e5) + 1; })();
+
+// ---------- sound ----------
+let ac = null, portalMuted = false;
+const muted = () => save.mute || portalMuted;
+function audio() { if (!ac) try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch {} if (ac && ac.state === 'suspended') ac.resume(); return ac; }
+function tone(f, d, v, type = 'sine', when = 0, slide = 0) {
+  if (muted() || !audio()) return;
+  const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, f + slide), t + d);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d + .05);
+}
+function swish() {
+  if (muted() || !audio()) return;
+  const len = ac.sampleRate * .3, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = buf; f.type = 'bandpass'; f.frequency.setValueAtTime(5000, ac.currentTime); f.frequency.exponentialRampToValueAtTime(900, ac.currentTime + .25);
+  g.gain.value = .35; s.connect(f).connect(g).connect(ac.destination); s.start();
+}
+const sfx = {
+  cut: () => { swish(); tone(180, .12, .12, 'triangle', .02); },
+  tick: (i) => tone(500 + i * 40, .04, .03, 'square'),
+  great: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, .4, .12, 'triangle', i * .08)),
+  ok: () => { tone(660, .25, .1, 'triangle'); tone(880, .3, .08, 'triangle', .1); },
+  bad: () => { tone(220, .25, .1, 'square', 0, -60); tone(160, .35, .1, 'square', .18, -40); },
+};
+
+// ---------- state ----------
+let L, G;   // level, game state
+function start(lv) {
+  L = lv;
+  G = { tries: 0, best: null, cut: null, cutT: 0, drag: null, results: [] };
+  if (!L.daily) { save.current = L.n; persist(); }
+  $('title').textContent = L.daily ? `Daily #${dailyNo}` : `Level ${L.n}`;
+  $('task').innerHTML = L.target === 50 ? 'Cut it exactly in <b>HALF</b>' : `Cut off exactly <b>${L.target}%</b>`;
+  $('hint').textContent = !L.daily && L.n === 1 ? 'Swipe across the shape to cut it' : '';
+  hide('result'); hide('levels');
+  updateTries(); controls();
+  resize();
+  Portal.start();
+}
+function updateTries() {
+  $('tries').innerHTML = Array.from({ length: TRIES }, (_, i) => `<span class="${i < G.tries ? 'used' : ''}">🔪</span>`).join('');
+}
+// error of a cut against the target, in percentage points
+function errorOf(share) { const t = L.target / 100; return Math.min(Math.abs(share - t), Math.abs(1 - share - t)) * 100; }
+const starsFor = (err) => (err <= 1 ? 3 : err <= 3 ? 2 : err <= 6 ? 1 : 0);
+function verdict(err) {
+  if (err <= .3) return ['PERFECT! 🎯', '#16a34a'];
+  if (err <= 1) return ['So close! 🔥', '#16a34a'];
+  if (err <= 3) return ['Nice cut 👌', '#e8a400'];
+  if (err <= 6) return ['Almost… 😬', '#ff8a3d'];
+  return ['Way off 😅', '#e5484d'];
+}
+function controls() {
+  const done = G.tries >= TRIES || (G.best && G.best.err <= 1);
+  $('bRetry').hidden = !G.cut || done || G.cutT < 1.1;
+  $('bNext').hidden = !G.cut || G.cutT < 1.1;
+  $('bNext').textContent = done || (G.best && starsFor(G.best.err) > 0) ? 'Results →' : 'Give up';
+}
+
+// ---------- drawing ----------
+const cv = $('board'), g = cv.getContext('2d');
+let S = 300, dpr = 1;
+function resize() {
+  const r = $('stage').getBoundingClientRect();
+  S = Math.floor(Math.max(220, Math.min(r.width - 8, r.height - 8, 560)));
+  dpr = Math.min(devicePixelRatio || 1, 3);
+  cv.style.width = cv.style.height = S + 'px'; cv.width = cv.height = Math.round(S * dpr);
+}
+addEventListener('resize', resize);
+const U = () => S * .45; // unit -> px
+const toPx = ([x, y]) => [S / 2 + x * U(), S / 2 + y * U()];
+const toUnit = ([x, y]) => [(x - S / 2) / U(), (y - S / 2) / U()];
+function shapeNow() { return transform(L.shape, L.rot, 1); }
+function path(sh, off = [0, 0]) {
+  g.beginPath();
+  for (const ring of [sh.outer, ...sh.holes]) {
+    ring.forEach((p, i) => { const [x, y] = toPx(p); i ? g.lineTo(x + off[0], y + off[1]) : g.moveTo(x + off[0], y + off[1]); });
+    g.closePath();
+  }
+}
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f));
+  return `rgb(${c.join(',')})`;
+}
+function drawPiece(sh, color, off) {
+  g.save();
+  path(sh, [off[0] + 6, off[1] + 10]); g.fillStyle = 'rgba(38,33,58,.12)'; g.fill('evenodd');
+  path(sh, off); g.fillStyle = color; g.fill('evenodd');
+  g.lineWidth = 4; g.strokeStyle = shade(L.color, -.25); g.lineJoin = 'round'; g.stroke();
+  g.restore();
+}
+function lineAcross(p, q) {
+  // extend the segment pq to the canvas edges
+  const dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy) || 1, k = S * 2 / len;
+  return [[p[0] - dx * k, p[1] - dy * k], [q[0] + dx * k, q[1] + dy * k]];
+}
+function centroid(poly) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0, n = poly.length; i < n; i++) { const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % n], c = x1 * y2 - x2 * y1; a += c; cx += (x1 + x2) * c; cy += (y1 + y2) * c; }
+  if (Math.abs(a) < 1e-9) return poly[0] || [0, 0];
+  return [cx / (3 * a), cy / (3 * a)];
+}
+function label(text, x, y, size, color) {
+  g.font = `700 ${size}px Fredoka, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = size * .22; g.lineJoin = 'round'; g.strokeStyle = '#fffdf8'; g.strokeText(text, x, y);
+  g.fillStyle = color; g.fillText(text, x, y);
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  drawFx();
+  if (!L) return;
+  const dt = Math.min(.05, (now - (frame.last || now)) / 1000); frame.last = now;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, S, S);
+  const sh = shapeNow();
+  if (!G.cut) {
+    const bob = Math.sin(now / 600) * 2;
+    drawPiece(sh, L.color, [0, bob]);
+    if (G.drag) {
+      const [a, b] = lineAcross(G.drag.p, G.drag.q);
+      g.save(); g.setLineDash([10, 8]); g.lineWidth = 3; g.strokeStyle = 'rgba(38,33,58,.55)';
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.restore();
+    }
+  } else {
+    const c = G.cut; c.t += dt; G.cutT = c.t;
+    const k = Math.min(1, c.t / .35), ease = 1 - (1 - k) ** 3, sep = 16 * ease;
+    const n = c.normalPx;
+    drawPiece(c.A, shade(L.color, .12), [n[0] * sep, n[1] * sep]);
+    drawPiece(c.B, shade(L.color, -.08), [-n[0] * sep, -n[1] * sep]);
+    // the knife flash
+    if (c.t < .35) {
+      const [a, b] = lineAcross(c.p, c.q);
+      g.save(); g.globalAlpha = 1 - c.t / .35; g.lineWidth = 6; g.strokeStyle = '#fff'; g.shadowColor = '#fff'; g.shadowBlur = 18;
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.restore();
+    }
+    // percentages count up, then the verdict
+    const cnt = clamp((c.t - .3) / .8, 0, 1), ce = 1 - (1 - cnt) ** 2;
+    if (cnt > 0) {
+      const ticks = Math.floor(cnt * 12); if (ticks > (c.ticks || 0)) { c.ticks = ticks; sfx.tick(ticks); }
+      for (const [piece, share, s] of [[c.A, c.shareA, 1], [c.B, 1 - c.shareA, -1]]) {
+        if (piece.outer.length < 3) continue;
+        const [ux, uy] = centroid(piece.outer), [px, py] = toPx([ux, uy]);
+        label(`${(share * 100 * ce).toFixed(1)}%`, px + n[0] * sep * s, py + n[1] * sep * s, Math.max(22, S * .075), '#26213a');
+      }
+    }
+    if (c.t > 1.1 && !c.done) { c.done = true; onVerdict(c); }
+    if (c.t > 1.1) {
+      const [txt, col] = verdict(c.err), pop = Math.min(1, (c.t - 1.1) / .2);
+      g.save(); g.translate(S / 2, S * .09); g.scale(.6 + .4 * pop, .6 + .4 * pop);
+      label(txt, 0, 0, Math.max(24, S * .08), col); g.restore();
+    }
+  }
+}
+requestAnimationFrame(frame);
+
+// ---------- cutting ----------
+function doCut(p, q) {
+  const sh = shapeNow(), up = toUnit(p), uq = toUnit(q);
+  const r = cutShape(sh, up, uq);
+  if (r.shareA < .001 || r.shareA > .999) { toast('Swipe through the shape'); return; }
+  const err = errorOf(r.shareA);
+  // the separation direction in pixels is the same as in unit space (uniform scale)
+  G.cut = { ...r, p, q, err, t: 0, normalPx: r.normal };
+  G.tries++; updateTries();
+  G.results.push(err);
+  if (!G.best || err < G.best.err) G.best = { err, share: r.shareA };
+  sfx.cut();
+  $('hint').textContent = '';
+  controls();
+}
+function onVerdict(c) {
+  const st = starsFor(c.err);
+  if (c.err <= .3 || st === 3) { sfx.great(); confetti(); } else if (st > 0) sfx.ok(); else sfx.bad();
+  if (st === 3) Portal.happy();
+  controls();
+  // a perfect cut or the last try ends the level
+  if (st === 3 || G.tries >= TRIES) setTimeout(finish, 900);
+}
+function finish() {
+  const st = starsFor(G.best.err);
+  Portal.stop();
+  if (L.daily) {
+    const prev = save.daily[today];
+    if (!prev || G.best.err < prev.err) save.daily[today] = { err: G.best.err, share: G.best.share };
+  } else {
+    save.best[L.n] = Math.max(save.best[L.n] || 0, st);
+    if (st > 0 && L.n >= save.unlocked) save.unlocked = Math.min(LEVELS.length, L.n + 1);
+  }
+  persist();
+  const shown = L.target === 50 ? Math.min(G.best.share, 1 - G.best.share) : nearest(G.best.share);
+  $('rBig').textContent = `${(shown * 100).toFixed(1)}%`;
+  $('rTitle').textContent = verdict(G.best.err)[0];
+  $('rStars').innerHTML = [0, 1, 2].map((i) => `<span class="${i < st ? '' : 'off'}">⭐</span>`).join('');
+  $('rText').textContent = `Target ${L.target}% · off by ${G.best.err.toFixed(G.best.err < 2 ? 2 : 1)} points`;
+  $('rNext').textContent = L.daily ? 'Back to levels' : st > 0 ? 'Next level →' : 'Try this level again';
+  $('rShare').style.display = '';
+  show('result');
+}
+const nearest = (share) => (Math.abs(share - L.target / 100) < Math.abs(1 - share - L.target / 100) ? share : 1 - share);
+
+// ---------- input ----------
+function local(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+cv.addEventListener('pointerdown', (e) => {
+  audio();
+  if (G.cut) return;
+  cv.setPointerCapture(e.pointerId);
+  const p = local(e); G.drag = { p, q: p };
+});
+cv.addEventListener('pointermove', (e) => { if (G.drag) G.drag.q = local(e); });
+const up = (e) => {
+  if (!G.drag) return;
+  const d = G.drag; G.drag = null; d.q = local(e);
+  if (Math.hypot(d.q[0] - d.p[0], d.q[1] - d.p[1]) < 24) { toast('Swipe all the way across'); return; }
+  doCut(d.p, d.q);
+};
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', () => (G.drag = null));
+$('bRetry').addEventListener('click', () => { G.cut = null; G.cutT = 0; controls(); });
+$('bNext').addEventListener('click', () => finish());
+$('rNext').addEventListener('click', () => {
+  if (L.daily) { start(level(save.current)); return; }
+  const st = starsFor(G.best.err);
+  start(level(st > 0 ? Math.min(LEVELS.length, L.n + 1) : L.n));
+});
+$('rRetry').addEventListener('click', () => start(L.daily ? daily(today) : level(L.n)));
+$('rShare').addEventListener('click', async () => {
+  const pct = (L.target === 50 ? Math.min(G.best.share, 1 - G.best.share) : nearest(G.best.share)) * 100;
+  const st = starsFor(G.best.err);
+  const head = L.daily ? `FIFTY/FIFTY Daily #${dailyNo}` : `FIFTY/FIFTY Level ${L.n}`;
+  const text = `${head} 🔪\nTarget ${L.target}% · I got ${pct.toFixed(1)}% ${'⭐'.repeat(st)}\nCan you beat it? bugarcade.github.io/fifty-fifty/`;
+  try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast('Copied!'); } } catch {}
+});
+$('bDaily').addEventListener('click', () => start(daily(today)));
+$('bLevels').addEventListener('click', () => { buildGrid(); show('levels'); });
+$('lClose').addEventListener('click', () => hide('levels'));
+$('bMute').addEventListener('click', () => { save.mute = !save.mute; persist(); muteIcon(); });
+const muteIcon = () => ($('bMute').textContent = muted() ? '🔇' : '🔊');
+addEventListener('keydown', (e) => {
+  if (e.key === 'r' && G.cut && !$('bRetry').hidden) $('bRetry').click();
+  if (e.key === 'Enter' && $('result').classList.contains('on')) $('rNext').click();
+});
+function buildGrid() {
+  const grid = $('grid'); grid.innerHTML = '';
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const b = document.createElement('button'); b.className = 'lv' + (n === save.current ? ' cur' : '');
+    b.disabled = n > save.unlocked;
+    const st = save.best[n] || 0;
+    b.innerHTML = `${n > save.unlocked ? '🔒' : n}<small>${'★'.repeat(st)}</small>`;
+    b.addEventListener('click', () => start(level(n)));
+    grid.appendChild(b);
+  }
+}
+function show(id) { $(id).classList.add('on'); }
+function hide(id) { $(id).classList.remove('on'); }
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 1400); }
+
+// ---------- confetti ----------
+const fx = $('fx'), fc = fx.getContext('2d'); let parts = [];
+function confetti() {
+  fx.width = innerWidth; fx.height = innerHeight; const r = cv.getBoundingClientRect();
+  for (let i = 0; i < 100; i++) parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 4, c: ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2'][i % 5], s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+}
+function drawFx() {
+  if (!parts.length) return;
+  fc.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter((p) => p.life < 120);
+  for (const p of parts) { p.vy += .45; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++; fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore(); }
+  if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+}
+
+// boot once saved progress is available (portal SDKs load it during init)
+Portal.ready.then(() => {
+  try { Object.assign(save, JSON.parse(Portal.storage.get('fifty')) || {}); } catch {}
+  muteIcon();
+  start(level(Math.min(save.current || 1, save.unlocked)));
+  Portal.loaded();
+});
+Portal.onMute((m) => { portalMuted = m; muteIcon(); });
+// test hook: step frames by hand (rAF pauses in hidden tabs)
+window.__ff = { get G() { return G; }, get L() { return L; }, doCut, start, level, daily, toPx, frame };
+})();
+</script>
+</body>
+</html>
