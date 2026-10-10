@@ -19,7 +19,7 @@ import sys
 p, portal, sdk = sys.argv[1:]
 s = open(p).read()
 head = f'<head>\n<script>window.PORTAL = "{portal}";</script>\n<script src="{sdk}"></script>'
-s = s.replace('<head>', head, 1).replace('src="../portal.js"', 'src="portal.js"')
+s = s.replace('<head>', head, 1).replace('src="../portal.js', 'src="portal.js')
 assert 'href="../"' not in s.replace('web-only" href="../"', '').replace('web-only"><a href="../"', ''), 'unguarded link back to the hub'
 open(p, 'w').write(s)
 PY

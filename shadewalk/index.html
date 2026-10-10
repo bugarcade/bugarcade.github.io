@@ -73,7 +73,7 @@
   <button class="btn" data-act="close-levels">Back</button>
 </div></div>
 
-<script src="../portal.js"></script>
+<script src="../portal.js?v=2"></script>
 <script src="levels.js"></script>
 <script>
 (() => {
@@ -85,13 +85,15 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const FONT = 'Fredoka, system-ui, sans-serif';
 const DEBUG_BOT = /[?&]bot/.test(location.search);
+let portalMuted = false; // the portal's own mute button wins over the in-game toggle
 
 // ---------- save ----------
 const store = {
-  load() { try { return JSON.parse(localStorage.getItem('shadewalk')) || {}; } catch { return {}; } },
-  save(d) { try { localStorage.setItem('shadewalk', JSON.stringify(d)); } catch {} },
+  load() { try { return JSON.parse(Portal.storage.get('shadewalk')) || {}; } catch { return {}; } },
+  save(d) { Portal.storage.set('shadewalk', JSON.stringify(d)); },
 };
-const save = Object.assign({ unlocked: 1, stars: {}, mute: false, current: 1 }, store.load());
+// filled in once the portal SDK is ready (its save data loads during init)
+const save = { unlocked: 1, stars: {}, mute: false, current: 1 };
 const persist = () => store.save(save);
 
 // ---------- view: logical height 720, width grows with the screen ----------
@@ -112,7 +114,7 @@ const Audio = (() => {
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
     try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
-    master = ac.createGain(); master.gain.value = save.mute ? 0 : 1; master.connect(ac.destination);
+    master = ac.createGain(); master.gain.value = save.mute || portalMuted ? 0 : 1; master.connect(ac.destination);
     musicGain = ac.createGain(); musicGain.gain.value = .32; musicGain.connect(master);
     sfxGain = ac.createGain(); sfxGain.gain.value = .9; sfxGain.connect(master);
     noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
@@ -155,7 +157,7 @@ const Audio = (() => {
   }
   return {
     init, music,
-    setMute(m) { if (master) master.gain.value = m ? 0 : 1; },
+    setMute() { if (master) master.gain.value = save.mute || portalMuted ? 0 : 1; },
     suspend() { if (ac) ac.suspend(); }, resume() { if (ac) ac.resume(); },
     sizzle(v) { if (sizzleGain) sizzleGain.gain.setTargetAtTime(v * .22, ac.currentTime, .05); },
     bloom() { [784, 988, 1175].forEach((f, i) => tone(f, .35, .12, 'sine', i * .06)); },
@@ -758,7 +760,7 @@ function frame(now) {
     if (S.mode === 'win') S.winT += dt;
     Audio.sizzle(S.mode === 'play' ? S.vamp.lit : 0);
   }
-  Audio.music(!paused && !save.mute);
+  Audio.music(!paused && !save.mute && !portalMuted);
   render();
 }
 
@@ -803,7 +805,7 @@ document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click
   if (act === 'restart') startLevel(lv.n);
   if (act === 'levels') { hideOverlays(); buildLevelGrid(); $('levels').classList.add('on'); Portal.stop(); }
   if (act === 'close-levels') { hideOverlays(); if (S.mode === 'play') Portal.start(); else if (S.mode === 'win') $('win').classList.add('on'); }
-  if (act === 'sound') { save.mute = !save.mute; persist(); Audio.setMute(save.mute); $('soundBtn').textContent = 'Sound: ' + (save.mute ? 'off' : 'on'); }
+  if (act === 'sound') { save.mute = !save.mute; persist(); Audio.setMute(); $('soundBtn').textContent = 'Sound: ' + (save.mute ? 'off' : 'on'); }
   if (act === 'next') {
     const n = lv.n + 1;
     // a short break between levels, never in the first few
@@ -816,10 +818,15 @@ document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click
 $('soundBtn').textContent = 'Sound: ' + (save.mute ? 'off' : 'on');
 document.addEventListener('visibilitychange', () => { if (document.hidden && S && S.mode === 'play' && !$('pause').classList.contains('on')) togglePause(); });
 
-// players land straight in gameplay
-startLevel(Math.min(save.current || 1, save.unlocked));
-Portal.loaded();
-requestAnimationFrame(frame);
+// players land straight in gameplay, once saved progress is available
+Portal.ready.then(() => {
+  Object.assign(save, store.load());
+  $('soundBtn').textContent = 'Sound: ' + (save.mute ? 'off' : 'on');
+  startLevel(Math.min(save.current || 1, save.unlocked));
+  Portal.loaded();
+  requestAnimationFrame(frame);
+});
+Portal.onMute((m) => { portalMuted = m; Audio.setMute(); });
 // ---------- capture (?bot only): portal covers and preview videos, rendered offline ----------
 let captureMode = false;
 function setView(w, h) {

@@ -51,5 +51,26 @@
         } catch { finish(); }
       }));
     },
+    // Progress save: CrazyGames Data Module when available (it syncs across devices), else localStorage.
+    // Read only after Portal.ready, because the SDK preloads the player's data during init.
+    storage: {
+      get(key) {
+        try { if (cgOn() && cg().data) return cg().data.getItem(key); } catch (e) { console.warn('[portal]', e); }
+        try { return localStorage.getItem(key); } catch { return null; }
+      },
+      set(key, value) {
+        try { if (cgOn() && cg().data) { cg().data.setItem(key, value); return; } } catch (e) { console.warn('[portal]', e); }
+        try { localStorage.setItem(key, value); } catch {}
+      },
+    },
+    // The portal can mute the game (its own sound button); fn(muted) runs now and on every change.
+    onMute(fn) {
+      ready.then(() => safe(() => {
+        if (!cgOn()) return;
+        const g = cg().game;
+        fn(!!(g.settings && g.settings.muteAudio));
+        g.addSettingsChangeListener((s) => fn(!!s.muteAudio));
+      }));
+    },
   };
 })();
