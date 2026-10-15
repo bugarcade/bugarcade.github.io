@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>BLIND MAZE</title>
+<meta name="description" content="Look at the maze for a few seconds. Then the lights go out. Find the exit from memory.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #fdf6ec; --ink: #26213a; --muted: #8f86a0; --card: #fffdf8; --line: #eadfce; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "Fredoka", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; transition: background .4s; }
+  body.dark { background: #15122a; }
+  body.dark .bar h1, body.dark #task { color: #f3eefe; }
+  body.dark #hint { color: #8d84b0; }
+  body.dark .icon { background: #221d3d; border-color: #2f2954; color: #f3eefe; }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  main { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .bar { width: min(560px, 100%); display: flex; align-items: center; gap: 8px; min-height: 44px; }
+  .bar h1 { font-size: 22px; font-weight: 600; flex: 1; text-align: center; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: var(--card); border: 2px solid var(--line); text-decoration: none; color: inherit; transition: background .4s, border-color .4s; }
+  .portal .web-only { visibility: hidden; }
+  #task { font-size: 23px; font-weight: 600; text-align: center; line-height: 1.2; }
+  #task b { color: #ff6b4a; }
+  #lives { display: flex; gap: 8px; font-size: 22px; height: 28px; }
+  #lives span.lost { opacity: .25; filter: grayscale(1); }
+  #stage { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+  #scene { touch-action: none; display: block; }
+  #hint { font-size: 16px; color: var(--muted); min-height: 22px; text-align: center; }
+  .controls { display: flex; gap: 10px; width: min(560px, 100%); justify-content: center; min-height: 54px; }
+  .btn { flex: 1; max-width: 220px; padding: 13px 10px; border-radius: 16px; font-size: 18px; font-weight: 600; background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #120f1c; }
+  .btn[hidden] { display: none; }
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(253, 246, 236, .86); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  .overlay.on { display: grid; }
+  .card { width: min(380px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 24px 22px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 20px 50px rgba(38, 33, 58, .18); animation: pop .35s cubic-bezier(.2, 1.5, .4, 1); max-height: calc(100vh - 32px); overflow-y: auto; }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } }
+  .card h2 { font-size: 32px; line-height: 1.1; }
+  .card p { font-size: 17px; color: var(--muted); }
+  .big { font-size: 54px; font-weight: 700; letter-spacing: -1px; }
+  .stars { font-size: 40px; letter-spacing: 6px; }
+  .stars .off { filter: grayscale(1) opacity(.25); }
+  .card .btn { width: 100%; max-width: none; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .grid { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .lv { aspect-ratio: 1; border-radius: 12px; background: #fff; border: 2px solid var(--line); font-size: 17px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .lv small { font-size: 9px; color: #e8a400; margin-top: 3px; height: 9px; letter-spacing: 1px; }
+  .lv:disabled { opacity: .35; cursor: default; }
+  .lv.cur { border-color: var(--ink); }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <a class="icon web-only" href="../" aria-label="More games">←</a>
+    <h1 id="title">Level 1</h1>
+    <button class="icon" id="bDaily" aria-label="Daily maze">📅</button>
+    <button class="icon" id="bLevels" aria-label="Levels">▦</button>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div id="task"></div>
+  <div id="lives"></div>
+  <div id="stage"><canvas id="scene"></canvas></div>
+  <div id="hint"></div>
+  <div class="controls">
+    <button class="btn primary" id="bGo">I'm ready 🌑</button>
+    <button class="btn" id="bRetry" hidden>↻ Try again</button>
+  </div>
+</main>
+
+<div class="overlay" id="result"><div class="card">
+  <h2 id="rTitle">Escaped!</h2>
+  <div class="big" id="rBig">🎉</div>
+  <div class="stars" id="rStars"></div>
+  <p id="rText"></p>
+  <button class="btn primary" id="rNext">Next level →</button>
+  <div class="row"><button class="btn" id="rRetry">Replay</button><button class="btn" id="rShare">Share</button></div>
+</div></div>
+<div class="overlay" id="levels"><div class="card">
+  <h2>Levels</h2>
+  <div class="grid" id="grid"></div>
+  <button class="btn" id="lClose">Back</button>
+</div></div>
+<canvas id="fx"></canvas>
+
+<script src="../portal.js?v=2"></script>
+<script src="maze.js"></script>
+<script>
+(() => {
+'use strict';
+const { level, daily, open, DIRS, LEVELS } = window.Blind;
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const LIVES = 3;
+
+// ---------- save ----------
+const save = { unlocked: 1, best: {}, current: 1, mute: false, daily: {} };
+const persist = () => Portal.storage.set('blindmaze', JSON.stringify(save));
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 15)) / 864e5) + 1; })();
+
+// ---------- sound ----------
+let ac = null, portalMuted = false;
+const muted = () => save.mute || portalMuted;
+function audio() {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+  if (ac && ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function tone(f, d, v, type = 'sine', when = 0, slide = 0) {
+  if (muted() || !audio()) return;
+  const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d + .05);
+}
+const sfx = {
+  step: () => tone(520 + Math.random() * 80, .06, .05, 'triangle'),
+  bump: () => { tone(140, .25, .22, 'square', 0, -70); tone(90, .3, .15, 'sine', .02, -30); },
+  dark: () => { tone(420, .6, .1, 'sawtooth', 0, -360); tone(210, .7, .08, 'sine', .05, -150); },
+  tick: () => tone(1200, .05, .04),
+  win: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, .4, .12, 'triangle', i * .08)),
+  lose: () => { tone(330, .3, .1, 'triangle', 0, -80); tone(247, .5, .1, 'triangle', .2, -80); },
+};
+
+// ---------- state ----------
+// phase: look (maze visible) → dark (walk from memory) → won | lost
+let M, G;
+function start(m) {
+  M = m;
+  G = { phase: 'look', t: 0, lookLeft: M.look, lives: LIVES, bumps: 0, steps: 0,
+    pos: [...M.start], from: [...M.start], moveT: 1, queue: [], trail: [[...M.start]], hit: [], shake: 0, light: 1, endT: 0, lastTick: Math.ceil(M.look) };
+  if (!M.daily) { save.current = M.n; persist(); }
+  $('title').textContent = M.daily ? `Daily #${dailyNo}` : `Level ${M.n}`;
+  $('task').innerHTML = `Memorize the way to the <b>exit</b>`;
+  $('hint').textContent = !M.daily && M.n <= 2 ? 'Then the lights go out. Swipe, tap or use arrow keys.' : '';
+  $('bGo').hidden = false; $('bRetry').hidden = true;
+  document.body.classList.remove('dark');
+  hide('result'); hide('levels');
+  updateLives(); resize();
+  Portal.start();
+}
+function updateLives() { $('lives').innerHTML = Array.from({ length: LIVES }, (_, i) => `<span class="${i < LIVES - G.lives ? 'lost' : ''}">❤️</span>`).join(''); }
+function goDark() {
+  if (G.phase !== 'look') return;
+  G.phase = 'dark';
+  document.body.classList.add('dark');
+  $('task').innerHTML = 'Find the exit <b>in the dark</b>';
+  $('bGo').hidden = true;
+  $('hint').textContent = 'Every wall you bump costs a ❤️';
+  sfx.dark();
+}
+const starsFor = (bumps) => Math.max(0, 3 - bumps);
+
+// ---------- moves ----------
+function move(dir) {
+  audio();
+  if (G.phase === 'look') goDark();
+  if (G.phase !== 'dark') return;
+  if (G.queue.length < 3) G.queue.push(dir);
+}
+function nextMove() {
+  const dir = G.queue.shift(), [x, y] = G.pos, [dx, dy] = DIRS[dir];
+  if (!open(M, x, y, dir)) {
+    // out of the maze or into a wall: the wall lights up for good and costs a heart
+    if (!G.hit.some((h) => h.x === x && h.y === y && h.dir === dir)) G.hit.push({ x, y, dir, t: G.t });
+    else G.hit.find((h) => h.x === x && h.y === y && h.dir === dir).t = G.t;
+    G.queue = []; G.lives--; G.bumps++; G.shake = 1; G.nudge = { dir, t: 0 };
+    sfx.bump(); updateLives();
+    if (navigator.vibrate) try { navigator.vibrate(60); } catch {}
+    if (G.lives <= 0) end(false);
+    return;
+  }
+  G.from = [...G.pos]; G.pos = [x + dx, y + dy]; G.moveT = 0; G.steps++;
+  G.trail.push([...G.pos]);
+  sfx.step();
+  if (G.pos[0] === M.exit[0] && G.pos[1] === M.exit[1]) { G.queue = []; end(true); }
+}
+function end(won) {
+  G.phase = won ? 'won' : 'lost'; G.endT = 0;
+  document.body.classList.remove('dark');
+  if (won) { sfx.win(); if (G.bumps === 0) Portal.happy(); setTimeout(confetti, 150); }
+  else sfx.lose();
+  $('task').innerHTML = won ? (G.bumps === 0 ? 'Perfect memory! <b>No bumps</b>' : 'You found the <b>exit</b>!') : 'Lost in the <b>dark</b>';
+  $('hint').textContent = '';
+  setTimeout(() => { if (G.phase === 'won') finish(); else { $('bRetry').hidden = false; finishLost(); } }, won ? 1300 : 1600);
+}
+function finish() {
+  const st = starsFor(G.bumps);
+  Portal.stop();
+  if (M.daily) { const p = save.daily[today]; if (!p || G.bumps < p.bumps) save.daily[today] = { bumps: G.bumps }; }
+  else { save.best[M.n] = Math.max(save.best[M.n] || 0, st); if (M.n >= save.unlocked) save.unlocked = Math.min(LEVELS.length, M.n + 1); }
+  persist();
+  $('rTitle').textContent = G.bumps === 0 ? 'Perfect memory!' : 'Escaped!';
+  $('rBig').textContent = G.bumps === 0 ? '🧠' : '🚪';
+  $('rStars').innerHTML = [0, 1, 2].map((i) => `<span class="${i < st ? '' : 'off'}">⭐</span>`).join('');
+  $('rText').textContent = `${G.bumps} ${G.bumps === 1 ? 'bump' : 'bumps'} · ${G.steps} steps (shortest ${M.shortest})`;
+  $('rNext').textContent = M.daily ? 'Back to levels' : 'Next level →';
+  show('result');
+}
+function finishLost() { Portal.stop(); $('hint').textContent = 'The maze stays the same. Look again and retry.'; }
+
+// ---------- layout ----------
+const cv = $('scene'), g = cv.getContext('2d');
+let W = 360, Hh = 480, dpr = 1, CS = 40, OX = 0, OY = 0;
+function resize() {
+  const r = $('stage').getBoundingClientRect();
+  if (!M) return;
+  const aspect = M.rows / M.cols;
+  W = Math.floor(Math.max(220, Math.min(r.width - 8, 560, (r.height - 8) / aspect)));
+  Hh = Math.floor(W * aspect);
+  dpr = Math.min(devicePixelRatio || 1, 3);
+  cv.style.width = W + 'px'; cv.style.height = Hh + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
+  const pad = Math.max(6, W * .02);
+  CS = Math.min((W - pad * 2) / M.cols, (Hh - pad * 2) / M.rows);
+  OX = (W - CS * M.cols) / 2; OY = (Hh - CS * M.rows) / 2;
+}
+addEventListener('resize', resize);
+const cx = (x) => OX + (x + .5) * CS, cy = (y) => OY + (y + .5) * CS;
+
+// ---------- simulation ----------
+const STEP = 1 / 120;
+function step(dt) {
+  G.t += dt;
+  if (G.phase === 'look') {
+    G.lookLeft -= dt;
+    const s = Math.ceil(G.lookLeft);
+    if (s < G.lastTick && s <= 3 && s > 0) sfx.tick();
+    G.lastTick = s;
+    if (G.lookLeft <= 0) goDark();
+  }
+  const lightTarget = G.phase === 'dark' ? 0 : 1;
+  G.light += clamp(lightTarget - G.light, -dt / .35, dt / .6);
+  if (G.moveT < 1) G.moveT = Math.min(1, G.moveT + dt / .09);
+  if (G.phase === 'dark' && G.moveT >= 1 && G.queue.length) nextMove();
+  G.shake = Math.max(0, G.shake - dt * 4);
+  if (G.nudge) { G.nudge.t += dt; if (G.nudge.t > .18) G.nudge = null; }
+  if (G.phase === 'won' || G.phase === 'lost') G.endT += dt;
+}
+
+// ---------- drawing ----------
+function wallSegs(all) {
+  // every closed side once: N and W of each cell, plus the outer E and S edges
+  const segs = [];
+  for (let y = 0; y < M.rows; y++) for (let x = 0; x < M.cols; x++) {
+    const c = M.cells[y * M.cols + x], X = OX + x * CS, Y = OY + y * CS;
+    if (!(c & 1)) segs.push([X, Y, X + CS, Y]);
+    if (!(c & 8)) segs.push([X, Y, X, Y + CS]);
+    if (x === M.cols - 1 && !(c & 2)) segs.push([X + CS, Y, X + CS, Y + CS]);
+    if (y === M.rows - 1 && !(c & 4)) segs.push([X, Y + CS, X + CS, Y + CS]);
+  }
+  return segs;
+}
+function hitSeg(h) {
+  const X = OX + h.x * CS, Y = OY + h.y * CS;
+  return { N: [X, Y, X + CS, Y], S: [X, Y + CS, X + CS, Y + CS], W: [X, Y, X, Y + CS], E: [X + CS, Y, X + CS, Y + CS] }[h.dir];
+}
+function line([x1, y1, x2, y2]) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+function label(text, x, y, size, color, stroke = '#fffdf8') {
+  g.font = `700 ${size}px Fredoka, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = size * .22; g.lineJoin = 'round'; g.strokeStyle = stroke; g.strokeText(text, x, y);
+  g.fillStyle = color; g.fillText(text, x, y);
+}
+function ballXY() {
+  const e = 1 - Math.pow(1 - G.moveT, 3);
+  let x = cx(G.from[0] + (G.pos[0] - G.from[0]) * e), y = cy(G.from[1] + (G.pos[1] - G.from[1]) * e);
+  if (G.nudge) { const [dx, dy] = DIRS[G.nudge.dir], k = Math.sin(G.nudge.t / .18 * Math.PI) * CS * .28; x += dx * k; y += dy * k; }
+  return [x, y];
+}
+function draw(now) {
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sh = G.shake * CS * .12;
+  g.translate(Math.sin(now / 20) * sh, Math.cos(now / 23) * sh);
+  const L = G.light;
+  // board: cream when lit, night when dark
+  const mix = (a, b) => a.map((v, i) => Math.round(b[i] + (v - b[i]) * L));
+  const bg = mix([255, 253, 248], [27, 23, 52]);
+  g.clearRect(-20, -20, W + 40, Hh + 40);
+  g.fillStyle = `rgb(${bg})`; g.beginPath(); g.roundRect(OX - CS * .2, OY - CS * .2, CS * M.cols + CS * .4, CS * M.rows + CS * .4, CS * .3); g.fill();
+  // faint dots at the corners, so you can still count cells in the dark
+  g.fillStyle = L > .5 ? 'rgba(38,33,58,.12)' : 'rgba(170,160,220,.28)';
+  const dr = Math.max(1.2, CS * .04);
+  for (let y = 0; y <= M.rows; y++) for (let x = 0; x <= M.cols; x++) { g.beginPath(); g.arc(OX + x * CS, OY + y * CS, dr, 0, 7); g.fill(); }
+  // trail
+  if (G.trail.length > 1 && G.phase !== 'look') {
+    g.strokeStyle = L > .5 ? 'rgba(255,107,74,.35)' : 'rgba(255,140,100,.45)'; g.lineWidth = CS * .22; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); G.trail.forEach(([x, y], i) => (i ? g.lineTo(cx(x), cy(y)) : g.moveTo(cx(x), cy(y)))); g.stroke();
+  }
+  // the maze walls fade with the light
+  if (L > 0) {
+    g.globalAlpha = L; g.strokeStyle = '#26213a'; g.lineWidth = Math.max(3, CS * .12); g.lineCap = 'round';
+    for (const s of wallSegs()) line(s);
+    g.globalAlpha = 1;
+  }
+  // walls you bumped into stay visible
+  for (const h of G.hit) {
+    const age = G.t - h.t, flash = Math.max(0, 1 - age / .5);
+    g.strokeStyle = flash > 0 ? `rgb(255,${Math.round(80 + 100 * (1 - flash))},80)` : (L > .5 ? '#e5484d' : '#ff7a6b');
+    g.lineWidth = Math.max(3, CS * .12) * (1 + flash * .8); g.lineCap = 'round';
+    line(hitSeg(h));
+  }
+  // exit
+  const pulse = (Math.sin(now / 250) + 1) / 2;
+  const ex = cx(M.exit[0]), ey = cy(M.exit[1]);
+  g.fillStyle = `rgba(52,199,120,${.25 + .2 * pulse})`; g.beginPath(); g.arc(ex, ey, CS * (.42 + .06 * pulse), 0, 7); g.fill();
+  g.font = `${Math.round(CS * .5)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🚪', ex, ey + CS * .03);
+  // ball with a soft glow
+  const [bx, by] = ballXY();
+  const glow = g.createRadialGradient(bx, by, 0, bx, by, CS * .9);
+  glow.addColorStop(0, `rgba(255,170,120,${.35 * (1 - L) + .1})`); glow.addColorStop(1, 'rgba(255,170,120,0)');
+  g.fillStyle = glow; g.beginPath(); g.arc(bx, by, CS * .9, 0, 7); g.fill();
+  g.fillStyle = '#ff6b4a'; g.beginPath(); g.arc(bx, by, CS * .3, 0, 7); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.6)'; g.beginPath(); g.arc(bx - CS * .09, by - CS * .1, CS * .09, 0, 7); g.fill();
+  // look countdown
+  if (G.phase === 'look') {
+    const k = clamp(G.lookLeft / M.look, 0, 1);
+    g.fillStyle = 'rgba(38,33,58,.1)'; g.beginPath(); g.roundRect(OX, OY - CS * .2 - 8, CS * M.cols, 5, 3); g.fill();
+    g.fillStyle = k < .3 ? '#e5484d' : '#ff6b4a'; g.beginPath(); g.roundRect(OX, OY - CS * .2 - 8, CS * M.cols * k, 5, 3); g.fill();
+    $('hint').textContent = (!M.daily && M.n <= 2 ? 'Then the lights go out. ' : '') + `Lights out in ${Math.max(0, G.lookLeft).toFixed(1)}s`;
+  }
+  if (G.phase === 'lost' && G.endT > .3) label('LOST IN THE DARK', W / 2, OY + CS * M.rows / 2, Math.max(22, W * .07), '#e5484d');
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  drawFx();
+  if (!M) return;
+  const dt = Math.min(.05, (now - (frame.last || now)) / 1000); frame.last = now;
+  frame.acc = (frame.acc || 0) + dt;
+  while (frame.acc >= STEP) { step(STEP); frame.acc -= STEP; }
+  draw(now);
+}
+requestAnimationFrame(frame);
+
+// ---------- input: keys, swipe (drag keeps walking), tap toward a side ----------
+const KEYS = { ArrowUp: 'N', ArrowDown: 'S', ArrowLeft: 'W', ArrowRight: 'E', KeyW: 'N', KeyS: 'S', KeyA: 'W', KeyD: 'E' };
+addEventListener('keydown', (e) => {
+  if (KEYS[e.code] && !$('result').classList.contains('on') && !$('levels').classList.contains('on')) { e.preventDefault(); move(KEYS[e.code]); }
+  if (e.code === 'Space' && G && G.phase === 'look') { e.preventDefault(); goDark(); }
+  if (e.key === 'r' && !$('bRetry').hidden) $('bRetry').click();
+  if (e.key === 'Enter' && $('result').classList.contains('on')) $('rNext').click();
+});
+let drag = null;
+const dirOf = (dx, dy) => (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : (dy > 0 ? 'S' : 'N'));
+cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); audio(); drag = { x: e.clientX, y: e.clientY, moved: false }; });
+cv.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y, step = Math.max(18, CS * .6);
+  if (Math.max(Math.abs(dx), Math.abs(dy)) >= step) { move(dirOf(dx, dy)); drag.x = e.clientX; drag.y = e.clientY; drag.moved = true; }
+});
+cv.addEventListener('pointerup', (e) => {
+  if (drag && !drag.moved && G && (G.phase === 'dark' || G.phase === 'look')) {
+    // a tap walks one cell toward where you tapped
+    const r = cv.getBoundingClientRect(), [bx, by] = ballXY();
+    const dx = e.clientX - r.left - bx, dy = e.clientY - r.top - by;
+    if (Math.hypot(dx, dy) > CS * .35) move(dirOf(dx, dy));
+  }
+  drag = null;
+});
+cv.addEventListener('pointercancel', () => (drag = null));
+
+$('bGo').addEventListener('click', () => { audio(); goDark(); });
+$('bRetry').addEventListener('click', () => start(M.daily ? daily(today) : level(M.n)));
+$('rNext').addEventListener('click', () => start(M.daily ? level(save.current) : level(Math.min(LEVELS.length, M.n + 1))));
+$('rRetry').addEventListener('click', () => start(M.daily ? daily(today) : level(M.n)));
+$('rShare').addEventListener('click', async () => {
+  const head = M.daily ? `BLIND MAZE Daily #${dailyNo}` : `BLIND MAZE Level ${M.n}`;
+  const text = `${head} 🌑\nEscaped with ${G.bumps} ${G.bumps === 1 ? 'bump' : 'bumps'} ${'⭐'.repeat(starsFor(G.bumps))}\nCan you walk it in the dark? bugarcade.github.io/blind-maze/`;
+  try { if (navigator.share) await navigator.share({ text }); else await navigator.clipboard.writeText(text); } catch {}
+});
+$('bDaily').addEventListener('click', () => start(daily(today)));
+$('bLevels').addEventListener('click', () => { buildGrid(); show('levels'); });
+$('lClose').addEventListener('click', () => hide('levels'));
+$('bMute').addEventListener('click', () => { save.mute = !save.mute; persist(); muteIcon(); });
+const muteIcon = () => ($('bMute').textContent = muted() ? '🔇' : '🔊');
+function buildGrid() {
+  const grid = $('grid'); grid.innerHTML = '';
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const b = document.createElement('button'); b.className = 'lv' + (n === save.current ? ' cur' : '');
+    b.disabled = n > save.unlocked;
+    b.innerHTML = `${n > save.unlocked ? '🔒' : n}<small>${'★'.repeat(save.best[n] || 0)}</small>`;
+    b.addEventListener('click', () => start(level(n)));
+    grid.appendChild(b);
+  }
+}
+function show(id) { $(id).classList.add('on'); }
+function hide(id) { $(id).classList.remove('on'); }
+
+// ---------- confetti ----------
+const fx = $('fx'), fc = fx.getContext('2d'); let parts = [];
+function confetti() {
+  fx.width = innerWidth; fx.height = innerHeight; const r = cv.getBoundingClientRect();
+  for (let i = 0; i < 100; i++) parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 4, c: ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2'][i % 5], s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+}
+function drawFx() {
+  if (!parts.length) return;
+  fc.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter((p) => p.life < 120);
+  for (const p of parts) { p.vy += .45; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++; fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore(); }
+  if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+}
+
+Portal.ready.then(() => {
+  try { Object.assign(save, JSON.parse(Portal.storage.get('blindmaze')) || {}); } catch {}
+  muteIcon();
+  start(level(Math.min(save.current || 1, save.unlocked)));
+  Portal.loaded();
+});
+Portal.onMute((m) => { portalMuted = m; muteIcon(); });
+// test hook: drive frames by hand (rAF pauses in hidden tabs)
+window.__bm = { get G() { return G; }, get M() { return M; }, start, level, daily, frame, move, goDark };
+})();
+</script>
+</body>
+</html>
