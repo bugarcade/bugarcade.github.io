@@ -83,7 +83,7 @@
     return Object.assign(m, { n: 0, daily: true });
   }
 
-  const api = { N, E, S, W, DIRS, LEVELS, level, daily, open, bfs };
+  const api = { N, E, S, W, DIRS, LEVELS, level, daily, open, bfs, build };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Blind = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>WHICH CUP?</title>
+<meta name="description" content="Water pours into the top cup and runs down the pipes. Some pipes are blocked. Which cup fills first?">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #fdf6ec; --ink: #26213a; --muted: #8f86a0; --card: #fffdf8; --line: #eadfce; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "Fredoka", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  main { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .bar { width: min(560px, 100%); display: flex; align-items: center; gap: 8px; min-height: 44px; }
+  .bar h1 { font-size: 22px; font-weight: 600; flex: 1; text-align: center; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: var(--card); border: 2px solid var(--line); text-decoration: none; color: inherit; }
+  .portal .web-only { visibility: hidden; }
+  #task { font-size: 23px; font-weight: 600; text-align: center; line-height: 1.2; }
+  #task b { color: #2f8fe0; }
+  #stage { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+  #scene { touch-action: manipulation; display: block; cursor: pointer; }
+  #hint { font-size: 16px; color: var(--muted); min-height: 22px; text-align: center; }
+  .controls { display: flex; gap: 10px; width: min(560px, 100%); justify-content: center; min-height: 54px; }
+  .btn { flex: 1; max-width: 220px; padding: 13px 10px; border-radius: 16px; font-size: 18px; font-weight: 600; background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #120f1c; }
+  .btn:disabled { opacity: .4; }
+  .btn[hidden] { display: none; }
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(253, 246, 236, .86); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  .overlay.on { display: grid; }
+  .card { width: min(380px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 24px 22px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 20px 50px rgba(38, 33, 58, .18); animation: pop .35s cubic-bezier(.2, 1.5, .4, 1); max-height: calc(100vh - 32px); overflow-y: auto; }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } }
+  .card h2 { font-size: 32px; line-height: 1.1; }
+  .card p { font-size: 17px; color: var(--muted); }
+  .big { font-size: 54px; font-weight: 700; letter-spacing: -1px; }
+  .card .btn { width: 100%; max-width: none; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .grid { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .lv { aspect-ratio: 1; border-radius: 12px; background: #fff; border: 2px solid var(--line); font-size: 17px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .lv small { font-size: 10px; margin-top: 3px; height: 10px; }
+  .lv:disabled { opacity: .35; cursor: default; }
+  .lv.cur { border-color: var(--ink); }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <a class="icon web-only" href="../" aria-label="More games">←</a>
+    <h1 id="title">Level 1</h1>
+    <button class="icon" id="bDaily" aria-label="Daily puzzle">📅</button>
+    <button class="icon" id="bLevels" aria-label="Levels">▦</button>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div id="task">Which cup fills <b>first</b>?</div>
+  <div id="stage"><canvas id="scene"></canvas></div>
+  <div id="hint"></div>
+  <div class="controls">
+    <button class="btn primary" id="bPour" disabled>Pick a cup</button>
+    <button class="btn" id="bFast" hidden>⏩ Faster</button>
+  </div>
+</main>
+
+<div class="overlay" id="result"><div class="card">
+  <h2 id="rTitle">Correct!</h2>
+  <div class="big" id="rBig">🎯</div>
+  <p id="rText"></p>
+  <button class="btn primary" id="rNext">Next level →</button>
+  <div class="row"><button class="btn" id="rRetry">Watch again</button><button class="btn" id="rShare">Share</button></div>
+</div></div>
+<div class="overlay" id="levels"><div class="card">
+  <h2>Levels</h2>
+  <p id="score"></p>
+  <div class="grid" id="grid"></div>
+  <button class="btn" id="lClose">Back</button>
+</div></div>
+<canvas id="fx"></canvas>
+
+<script src="../portal.js?v=2"></script>
+<script src="cups.js"></script>
+<script>
+(() => {
+'use strict';
+const { level, daily, simulate, labels, LEVELS } = window.Cups;
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---------- save: per level, did you get it on the first try ----------
+const save = { unlocked: 1, res: {}, current: 1, mute: false, daily: {} };
+const persist = () => Portal.storage.set('whichcup', JSON.stringify(save));
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 16)) / 864e5) + 1; })();
+
+// ---------- sound: running water whose pitch follows the busiest cup ----------
+let ac = null, wGain = null, wFilter = null, portalMuted = false;
+const muted = () => save.mute || portalMuted;
+function audio() {
+  if (!ac) {
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      const src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+      wFilter = ac.createBiquadFilter(); wFilter.type = 'bandpass'; wFilter.Q.value = 5; wFilter.frequency.value = 500;
+      wGain = ac.createGain(); wGain.gain.value = 0;
+      src.connect(wFilter).connect(wGain).connect(ac.destination); src.start();
+    } catch {}
+  }
+  if (ac && ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function tone(f, d, v, type = 'sine', when = 0, slide = 0) {
+  if (muted() || !audio()) return;
+  const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, f + slide), t + d);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d + .05);
+}
+const sfx = {
+  pick: () => tone(880, .1, .08, 'triangle'),
+  full: () => { tone(2100, .25, .06); tone(2900, .2, .04, 'sine', .01); },
+  win: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, .4, .12, 'triangle', i * .08)),
+  lose: () => { tone(330, .3, .1, 'triangle', 0, -80); tone(247, .5, .1, 'triangle', .2, -80); },
+};
+function waterSound(on, fill) {
+  if (!wGain) return;
+  wGain.gain.setTargetAtTime(muted() || !on ? 0 : .22, ac.currentTime, .06);
+  wFilter.frequency.setTargetAtTime(300 + fill * 1200, ac.currentTime, .1);
+}
+
+// ---------- state ----------
+// phase: pick → pour → done
+let L, G, LBL;
+function start(lv) {
+  L = lv; LBL = labels(L.cups);
+  G = { phase: 'pick', pick: null, simT: 0, speed: L.fillT / 4.2, fullSeen: L.cups.map(() => false), endT: 0, fast: false, replay: false };
+  if (!L.daily) { save.current = L.n; persist(); }
+  $('title').textContent = L.daily ? `Daily #${dailyNo}` : `Level ${L.n}`;
+  $('hint').textContent = !L.daily && L.n <= 2 ? 'Tap the cup you think fills up first' : 'Blocked pipes ✖ let nothing through';
+  $('bPour').hidden = false; $('bPour').disabled = true; $('bPour').textContent = 'Pick a cup'; $('bFast').hidden = true;
+  hide('result'); hide('levels');
+  resize();
+  Portal.start();
+}
+function choose(id) {
+  if (G.phase !== 'pick') return;
+  audio(); sfx.pick();
+  G.pick = id;
+  $('bPour').disabled = false; $('bPour').textContent = `Pour! (${LBL[id]})`;
+}
+function pour() {
+  if (G.phase !== 'pick' || G.pick === null) return;
+  audio();
+  G.phase = 'pour'; G.simT = 0;
+  $('bPour').hidden = true; $('bFast').hidden = false;
+  $('hint').textContent = `You picked ${LBL[G.pick]}`;
+}
+function replay() {
+  hide('result');
+  G.phase = 'pour'; G.simT = 0; G.replay = true; G.fullSeen = L.cups.map(() => false); G.fast = false;
+  $('bFast').hidden = false;
+  Portal.start();
+}
+function decide() {
+  G.phase = 'done'; G.endT = 0;
+  waterSound(false, 0);
+  const ok = G.pick === L.answer;
+  if (!G.replay) {
+    if (ok) { sfx.win(); setTimeout(confetti, 100); Portal.happy(); } else sfx.lose();
+    if (L.daily) { if (!save.daily[today]) save.daily[today] = { ok, pick: LBL[G.pick] }; }
+    else {
+      if (save.res[L.n] === undefined) save.res[L.n] = ok;
+      if (L.n >= save.unlocked) save.unlocked = Math.min(LEVELS.length, L.n + 1);
+    }
+    persist();
+  }
+  $('bFast').hidden = true;
+  setTimeout(() => {
+    Portal.stop();
+    $('rTitle').textContent = ok ? 'Correct! 🎯' : 'Not this time';
+    $('rBig').textContent = ok ? '🥤' : `${LBL[L.answer]}`;
+    $('rText').textContent = ok ? `${LBL[L.answer]} fills first. Most people pick ${LBL[naive()]}.` : `${LBL[L.answer]} fills first. You picked ${LBL[G.pick]}.`;
+    $('rNext').textContent = L.daily ? 'Back to levels' : 'Next level →';
+    show('result');
+  }, 1300);
+}
+const naive = () => { const n = window.Cups.naiveOf(L.cups); return n >= 0 && n !== L.answer ? n : L.cups.find((c) => c.id !== L.answer && c.id !== 0)?.id ?? 0; };
+
+// ---------- layout: world is 100 x 126 ----------
+const cv = $('scene'), g = cv.getContext('2d');
+const WH = 126;
+let W = 360, Hh = 450, dpr = 1, S = 3.6;
+function resize() {
+  const r = $('stage').getBoundingClientRect();
+  W = Math.floor(Math.max(240, Math.min(r.width - 8, 560, (r.height - 8) * 100 / WH)));
+  Hh = Math.floor(W * WH / 100); S = W / 100;
+  dpr = Math.min(devicePixelRatio || 1, 3);
+  cv.style.width = W + 'px'; cv.style.height = Hh + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
+}
+addEventListener('resize', resize);
+
+// ---------- drawing ----------
+const WATER = '#4dabf7', WATER2 = '#2f8fe0', GLASS = 'rgba(110,140,170,.95)';
+function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function cupBox(c) { return { x0: (c.x - c.w / 2) * S, x1: (c.x + c.w / 2) * S, top: (c.shelf - c.h) * S, bot: c.shelf * S }; }
+function pipePath(c, o) {
+  const to = L.cups[o.to], b = cupBox(c), y = (c.shelf - o.h) * S;
+  const sx = o.side < 0 ? b.x0 : b.x1;
+  return [[sx, y], [to.x * S, y], [to.x * S, (to.shelf - to.h) * S - 2.2 * S]];
+}
+function poly(pts) { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); }
+function draw(now) {
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, Hh);
+  const st = simulate(L.cups, G.phase === 'pick' ? 0 : G.simT);
+  const running = G.phase !== 'pick' && G.phase !== 'done';
+  // pipes behind the cups
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const c of L.cups) for (const o of c.outs) {
+    const p = pipePath(c, o);
+    poly(p); g.strokeStyle = '#b9c3cf'; g.lineWidth = 3.2 * S; g.stroke();
+    poly(p); g.strokeStyle = '#e9eef3'; g.lineWidth = 2 * S; g.stroke();
+    const flowing = running && st.out && st.out[c.id] && st.out[c.id].includes(o);
+    if (flowing) {
+      poly(p); g.strokeStyle = WATER; g.lineWidth = 1.5 * S; g.setLineDash([2.2 * S, 1.4 * S]); g.lineDashOffset = -now / 25; g.stroke(); g.setLineDash([]);
+      // falling stream into the next cup
+      const to = L.cups[o.to], [ex, ey] = p[2], surf = (to.shelf - st.level[to.id]) * S;
+      g.strokeStyle = WATER; g.lineWidth = 1.1 * S; g.beginPath(); g.moveTo(ex, ey); g.lineTo(ex + Math.sin(now / 60) * .2 * S, surf); g.stroke();
+    }
+  }
+  // tap + stream into the top cup
+  const top = L.cups[0], tb = cupBox(top);
+  g.fillStyle = '#9aa7b4'; rr(36 * S, 2 * S, 16 * S, 4.5 * S, 1.5 * S); g.fill();
+  rr(46 * S, 4 * S, 6 * S, 7 * S, 1.2 * S); g.fill();
+  g.fillStyle = '#c4ced8'; rr(36 * S, 2 * S, 16 * S, 1.6 * S, 1 * S); g.fill();
+  if (running) {
+    const surf = (top.shelf - st.level[0]) * S;
+    g.strokeStyle = WATER; g.lineWidth = 1.6 * S; g.beginPath(); g.moveTo(49 * S, 11 * S); g.lineTo(49 * S + Math.sin(now / 50) * .25 * S, surf); g.stroke();
+  }
+  // cups, shelves, letters
+  for (const c of L.cups) {
+    const b = cupBox(c), lv = st.level[c.id] * S;
+    // shelf
+    g.fillStyle = '#d9b48a'; rr(b.x0 - 2.5 * S, b.bot + .9 * S, (b.x1 - b.x0) + 5 * S, 1.8 * S, .6 * S); g.fill();
+    // glass back
+    g.fillStyle = 'rgba(190,220,245,.25)'; g.fillRect(b.x0, b.top, b.x1 - b.x0, b.bot - b.top);
+    // water
+    if (lv > 0) {
+      const wob = running ? Math.sin(now / 90 + c.id) * .25 * S : 0;
+      const gr = g.createLinearGradient(0, b.bot - lv, 0, b.bot); gr.addColorStop(0, WATER); gr.addColorStop(1, WATER2);
+      g.fillStyle = gr; g.beginPath(); g.moveTo(b.x0, b.bot); g.lineTo(b.x0, b.bot - lv + wob); g.lineTo(b.x1, b.bot - lv - wob); g.lineTo(b.x1, b.bot); g.fill();
+      if (st.full[c.id] <= st.t && running) { // spilling over the rim
+        g.strokeStyle = WATER; g.lineWidth = .9 * S;
+        for (const sx of [b.x0 - .4 * S, b.x1 + .4 * S]) { g.beginPath(); g.moveTo(sx, b.top); g.lineTo(sx, b.bot + .8 * S); g.stroke(); }
+      }
+    }
+    // walls + outlet stubs
+    g.strokeStyle = GLASS; g.lineWidth = 1.1 * S;
+    g.beginPath(); g.moveTo(b.x0, b.top); g.lineTo(b.x0, b.bot); g.lineTo(b.x1, b.bot); g.lineTo(b.x1, b.top); g.stroke();
+    for (const o of c.outs) {
+      const y = (c.shelf - o.h) * S, x = o.side < 0 ? b.x0 : b.x1;
+      if (o.clogged) {
+        g.fillStyle = '#e5484d'; g.beginPath(); g.arc(x + o.side * 2.2 * S, y, 2.1 * S, 0, 7); g.fill();
+        g.strokeStyle = '#fff'; g.lineWidth = .7 * S; const k = 1 * S, cx = x + o.side * 2.2 * S;
+        g.beginPath(); g.moveTo(cx - k, y - k); g.lineTo(cx + k, y + k); g.moveTo(cx + k, y - k); g.lineTo(cx - k, y + k); g.stroke();
+      }
+    }
+    g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = .6 * S; g.beginPath(); g.moveTo(b.x0 + 1.2 * S, b.top + 2 * S); g.lineTo(b.x0 + 1.2 * S, b.bot - 2 * S); g.stroke();
+    // label
+    const ly = b.bot + 6 * S, lx = c.x * S;
+    const won = G.phase === 'done' || (running && st.full[c.id] <= st.t);
+    const isAns = c.id === L.answer && (G.phase === 'done' || (running && st.full[c.id] <= st.t));
+    let fill = '#fff', stroke = '#d8cdbd', txt = INK;
+    if (G.pick === c.id) { fill = '#26213a'; stroke = '#26213a'; txt = '#fff'; }
+    if (isAns) { fill = '#34c778'; stroke = '#34c778'; txt = '#fff'; }
+    else if (G.phase === 'done' && G.pick === c.id) { fill = '#e5484d'; stroke = '#e5484d'; txt = '#fff'; }
+    g.fillStyle = fill; g.strokeStyle = stroke; g.lineWidth = .6 * S; g.beginPath(); g.arc(lx, ly, 3.3 * S, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = txt; g.font = `700 ${4 * S}px Fredoka, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(LBL[c.id], lx, ly + .2 * S);
+    if (isAns && won) { g.font = `${5 * S}px sans-serif`; g.fillText('👑', lx, b.top - 4 * S); }
+  }
+}
+const INK = '#26213a';
+
+// ---------- loop ----------
+function step(dt) {
+  if (G.phase === 'pour') {
+    G.simT += dt * G.speed * (G.fast ? 3 : 1);
+    const st = simulate(L.cups, G.simT);
+    for (const c of L.cups) if (!G.fullSeen[c.id] && st.full[c.id] <= G.simT) { G.fullSeen[c.id] = true; sfx.full(); }
+    waterSound(true, Math.max(...st.level.map((l, i) => l / L.cups[i].h)));
+    if (G.simT >= L.fillT) { G.phase = 'after'; G.afterT = 0; }
+  } else if (G.phase === 'after') {
+    G.simT += dt * G.speed * .6; G.afterT += dt;
+    if (G.afterT > .8) decide();
+  }
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  drawFx();
+  if (!L) return;
+  const dt = Math.min(.05, (now - (frame.last || now)) / 1000); frame.last = now;
+  step(dt);
+  draw(now);
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+cv.addEventListener('pointerdown', (e) => {
+  if (G.phase !== 'pick') return;
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / S, y = (e.clientY - r.top) / S;
+  let best = null, bd = 1e9;
+  for (const c of L.cups) {
+    const inCup = x > c.x - c.w / 2 - 3 && x < c.x + c.w / 2 + 3 && y > c.shelf - c.h - 3 && y < c.shelf + 10;
+    const d = Math.hypot(x - c.x, y - (c.shelf - c.h / 2));
+    if (inCup && d < bd) { bd = d; best = c.id; }
+  }
+  if (best !== null) choose(best);
+});
+addEventListener('keydown', (e) => {
+  const i = 'abcdefg'.indexOf(e.key.toLowerCase());
+  if (i >= 0 && G && G.phase === 'pick') { const id = LBL.indexOf('ABCDEFG'[i]); if (id >= 0) choose(id); }
+  if ((e.key === 'Enter' || e.code === 'Space') && G) {
+    if ($('result').classList.contains('on')) $('rNext').click(); else if (G.phase === 'pick') pour();
+  }
+});
+$('bPour').addEventListener('click', pour);
+$('bFast').addEventListener('click', () => { G.fast = true; $('bFast').hidden = true; });
+$('rNext').addEventListener('click', () => start(L.daily ? level(save.current) : level(Math.min(LEVELS.length, L.n + 1))));
+$('rRetry').addEventListener('click', replay);
+$('rShare').addEventListener('click', async () => {
+  const head = L.daily ? `WHICH CUP? Daily #${dailyNo}` : `WHICH CUP? Level ${L.n}`;
+  const ok = G.pick === L.answer;
+  const text = `${head} 🥤\n${ok ? 'Got it right ✅' : 'Got fooled ❌'}\nWhich cup fills first? bugarcade.github.io/which-cup/`;
+  try { if (navigator.share) await navigator.share({ text }); else await navigator.clipboard.writeText(text); } catch {}
+});
+$('bDaily').addEventListener('click', () => start(daily(today)));
+$('bLevels').addEventListener('click', () => { buildGrid(); show('levels'); });
+$('lClose').addEventListener('click', () => hide('levels'));
+$('bMute').addEventListener('click', () => { save.mute = !save.mute; persist(); muteIcon(); });
+const muteIcon = () => ($('bMute').textContent = muted() ? '🔇' : '🔊');
+function buildGrid() {
+  const grid = $('grid'); grid.innerHTML = '';
+  const done = Object.values(save.res), right = done.filter(Boolean).length;
+  $('score').textContent = done.length ? `First-try score: ${right} / ${done.length}` : 'Your first guess is the one that counts';
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const b = document.createElement('button'); b.className = 'lv' + (n === save.current ? ' cur' : '');
+    b.disabled = n > save.unlocked;
+    const r = save.res[n];
+    b.innerHTML = `${n > save.unlocked ? '🔒' : n}<small>${r === true ? '✅' : r === false ? '❌' : ''}</small>`;
+    b.addEventListener('click', () => start(level(n)));
+    grid.appendChild(b);
+  }
+}
+function show(id) { $(id).classList.add('on'); }
+function hide(id) { $(id).classList.remove('on'); }
+
+// ---------- confetti ----------
+const fx = $('fx'), fc = fx.getContext('2d'); let parts = [];
+function confetti() {
+  fx.width = innerWidth; fx.height = innerHeight; const r = cv.getBoundingClientRect();
+  for (let i = 0; i < 100; i++) parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 4, c: ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2'][i % 5], s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+}
+function drawFx() {
+  if (!parts.length) return;
+  fc.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter((p) => p.life < 120);
+  for (const p of parts) { p.vy += .45; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++; fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore(); }
+  if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+}
+
+Portal.ready.then(() => {
+  try { Object.assign(save, JSON.parse(Portal.storage.get('whichcup')) || {}); } catch {}
+  muteIcon();
+  start(level(Math.min(save.current || 1, save.unlocked)));
+  Portal.loaded();
+});
+Portal.onMute((m) => { portalMuted = m; muteIcon(); });
+// test hook: drive frames by hand (rAF pauses in hidden tabs)
+window.__wc = { get G() { return G; }, get L() { return L; }, start, level, daily, frame, choose, pour };
+})();
+</script>
+</body>
+</html>
