@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>KNOT OR NOT?</title>
+<meta name="description" content="A tangled rope. Pull both ends. Does it tighten into a knot, or slide out straight? Math decides.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #fdf6ec; --ink: #26213a; --muted: #8f86a0; --card: #fffdf8; --line: #eadfce; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "Fredoka", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  main { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .bar { width: min(560px, 100%); display: flex; align-items: center; gap: 8px; min-height: 44px; }
+  .bar h1 { font-size: 22px; font-weight: 600; flex: 1; text-align: center; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: var(--card); border: 2px solid var(--line); text-decoration: none; color: inherit; }
+  .portal .web-only { visibility: hidden; }
+  #task { font-size: 23px; font-weight: 600; text-align: center; line-height: 1.2; }
+  #task b { color: #c0652b; }
+  #dots { display: flex; gap: 6px; height: 22px; font-size: 18px; }
+  #stage { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+  #scene { display: block; }
+  #hint { font-size: 16px; color: var(--muted); min-height: 22px; text-align: center; }
+  .controls { display: flex; gap: 10px; width: min(560px, 100%); justify-content: center; min-height: 58px; }
+  .btn { flex: 1; max-width: 240px; padding: 14px 10px; border-radius: 16px; font-size: 20px; font-weight: 700; background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.knot { background: #c0652b; color: #fff; border-color: #c0652b; box-shadow: 0 4px 0 #8a4317; }
+  .btn.not { background: #3f8fd2; color: #fff; border-color: #3f8fd2; box-shadow: 0 4px 0 #2a669c; }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #120f1c; }
+  .btn[hidden] { display: none; }
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(253, 246, 236, .86); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  .overlay.on { display: grid; }
+  .card { width: min(380px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 24px 22px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 20px 50px rgba(38, 33, 58, .18); animation: pop .35s cubic-bezier(.2, 1.5, .4, 1); max-height: calc(100vh - 32px); overflow-y: auto; }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } }
+  .card h2 { font-size: 32px; line-height: 1.1; }
+  .card p { font-size: 17px; color: var(--muted); }
+  .big { font-size: 46px; font-weight: 700; letter-spacing: 4px; }
+  .card .btn { width: 100%; max-width: none; font-size: 18px; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .grid { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .lv { aspect-ratio: 1; border-radius: 12px; background: #fff; border: 2px solid var(--line); font-size: 17px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .lv small { font-size: 10px; margin-top: 3px; height: 10px; }
+  .lv:disabled { opacity: .35; cursor: default; }
+  .lv.cur { border-color: var(--ink); }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <a class="icon web-only" href="../" aria-label="More games">←</a>
+    <h1 id="title">Level 1</h1>
+    <button class="icon" id="bDaily" aria-label="Daily ropes">📅</button>
+    <button class="icon" id="bLevels" aria-label="Levels">▦</button>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div id="task">Pull both ends. <b>Knot</b> or not?</div>
+  <div id="dots"></div>
+  <div id="stage"><canvas id="scene"></canvas></div>
+  <div id="hint"></div>
+  <div class="controls">
+    <button class="btn knot" id="bKnot">🪢 KNOT</button>
+    <button class="btn not" id="bNot">〰️ NOT</button>
+    <button class="btn" id="bAgain" hidden>↻ Pull again</button>
+    <button class="btn primary" id="bNext" hidden>Next →</button>
+  </div>
+</main>
+
+<div class="overlay" id="result"><div class="card">
+  <h2 id="rTitle">Daily ropes</h2>
+  <div class="big" id="rBig"></div>
+  <p id="rText"></p>
+  <button class="btn primary" id="rNext">Back to levels</button>
+  <div class="row"><button class="btn" id="rShare">Share</button></div>
+</div></div>
+<div class="overlay" id="levels"><div class="card">
+  <h2>Levels</h2>
+  <p id="score"></p>
+  <div class="grid" id="grid"></div>
+  <button class="btn" id="lClose">Back</button>
+</div></div>
+<canvas id="fx"></canvas>
+
+<script src="../portal.js?v=2"></script>
+<script src="knots.js"></script>
+<script>
+(() => {
+'use strict';
+const { level, daily, knotName, LEVELS } = window.Knots;
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+// ---------- save ----------
+const save = { unlocked: 1, res: {}, current: 1, mute: false, daily: {} };
+const persist = () => Portal.storage.set('knotornot', JSON.stringify(save));
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 17)) / 864e5) + 1; })();
+
+// ---------- sound ----------
+let ac = null, portalMuted = false, noiseBuf = null;
+const muted = () => save.mute || portalMuted;
+function audio() {
+  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); const n = ac.sampleRate; noiseBuf = ac.createBuffer(1, n, n); const d = noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; } catch {} }
+  if (ac && ac.state === 'suspended') ac.resume();
+  return ac;
+}
+function tone(f, d, v, type = 'sine', when = 0, slide = 0) {
+  if (muted() || !audio()) return;
+  const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d + .05);
+}
+function noise(d, f0, f1, v, when = 0, q = 4) {
+  if (muted() || !audio()) return;
+  const t = ac.currentTime + when, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = q; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + d);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .05); g.gain.setValueAtTime(v, t + d * .7); g.gain.linearRampToValueAtTime(0, t + d);
+  s.connect(f).connect(g).connect(ac.destination); s.start(t); s.stop(t + d + .05);
+}
+const sfx = {
+  pull: () => { noise(1.3, 300, 900, .22, 0, 6); for (let k = 0; k < 6; k++) tone(180 + k * 25, .06, .05, 'sawtooth', k * .18); },
+  knot: () => { tone(90, .35, .35, 'sine', 0, -30); noise(.15, 1200, 600, .25, 0, 2); },
+  slide: () => noise(.5, 500, 2400, .2, 0, 2),
+  right: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, .4, .12, 'triangle', .25 + i * .08)),
+  wrong: () => { tone(330, .3, .1, 'triangle', .25, -80); tone(247, .5, .1, 'triangle', .45, -80); },
+};
+
+// ---------- state ----------
+// phase: ask → pull → done
+let R, G, run = null;
+function startLevel(n) { run = null; show(level(n)); }
+function startDaily() { run = { ropes: daily(today), i: 0, marks: [] }; show(run.ropes[0]); }
+function show(rope) {
+  R = rope;
+  G = { phase: 'ask', pick: null, t: 0, shake: 0 };
+  if (!R.daily) { save.current = R.n; persist(); }
+  $('title').textContent = R.daily ? `Daily #${dailyNo}` : `Level ${R.n}`;
+  $('task').innerHTML = 'Pull both ends. <b>Knot</b> or not?';
+  $('hint').textContent = !R.daily && R.n <= 2 ? `${R.X.length} crossings. Imagine pulling the ends apart.` : `${R.X.length} crossings`;
+  $('bKnot').hidden = $('bNot').hidden = false; $('bAgain').hidden = $('bNext').hidden = true;
+  dots(); hide('result'); hide('levels'); resize();
+  Portal.start();
+}
+function dots() { $('dots').innerHTML = run ? run.ropes.map((_, i) => (i < run.marks.length ? (run.marks[i] ? '🟩' : '🟥') : i === run.i ? '⬜' : '▫️')).join('') : ''; }
+function answer(knot) {
+  if (G.phase !== 'ask') return;
+  audio(); G.pick = knot; G.phase = 'pull'; G.t = 0; prepPull();
+  $('bKnot').hidden = $('bNot').hidden = true;
+  $('hint').textContent = 'Pulling…';
+  sfx.pull();
+}
+function afterPull() {
+  G.phase = 'done';
+  const ok = G.pick === R.knot;
+  R.knot ? sfx.knot() : sfx.slide();
+  ok ? (sfx.right(), setTimeout(confetti, 250), Portal.happy()) : sfx.wrong();
+  $('task').innerHTML = (ok ? '✅ ' : '❌ ') + (R.knot ? `It's ${knotName(R.span)}!` : 'Not a knot. It slides out!');
+  $('hint').textContent = ok ? 'You read the rope right.' : R.knot ? 'Those crossings lock each other in.' : 'Every crossing could slip loose.';
+  if (run) { run.marks.push(ok); dots(); }
+  else {
+    if (save.res[R.n] === undefined) save.res[R.n] = ok;
+    if (R.n >= save.unlocked) save.unlocked = Math.min(LEVELS.length, R.n + 1);
+    persist();
+  }
+  $('bAgain').hidden = false; $('bNext').hidden = false;
+  $('bNext').textContent = run ? (run.i < run.ropes.length - 1 ? 'Next rope →' : 'Results →') : 'Next level →';
+  Portal.stop();
+}
+function next() {
+  if (run) {
+    if (run.i < run.ropes.length - 1) { run.i++; show(run.ropes[run.i]); return; }
+    const score = run.marks.filter(Boolean).length;
+    if (!save.daily[today]) { save.daily[today] = { score, marks: run.marks }; persist(); }
+    $('rTitle').textContent = score === 5 ? 'Knot master! 🪢' : score >= 3 ? 'Nice reading!' : 'Ropes are tricky';
+    $('rBig').textContent = run.marks.map((m) => (m ? '🟩' : '🟥')).join('');
+    $('rText').textContent = `${score} / 5 ropes right`;
+    show_('result');
+    return;
+  }
+  startLevel(Math.min(LEVELS.length, R.n + 1));
+}
+
+// ---------- layout ----------
+const cv = $('scene'), g = cv.getContext('2d');
+let W = 360, Hh = 340, dpr = 1;
+const ASPECT = .92;
+function resize() {
+  const r = $('stage').getBoundingClientRect();
+  W = Math.floor(Math.max(240, Math.min(r.width - 4, 600, (r.height - 4) / ASPECT)));
+  Hh = Math.floor(W * ASPECT);
+  dpr = Math.min(devicePixelRatio || 1, 3);
+  cv.style.width = W + 'px'; cv.style.height = Hh + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
+}
+addEventListener('resize', resize);
+const X = (p) => p[0] * W, Y = (p) => (.04 + p[1] * .92) * Hh;
+
+// ---------- the pull ----------
+// knot: the tangled middle shrinks toward the centre (same crossings, just tighter), tails run straight to the hands.
+// not: the whole rope eases onto the straight line between the hands.
+let pullTarget = null;
+function prepPull() {
+  const P = R.P, N = P.length, ends = [[.015, .5], [.985, .5]];
+  const T = new Array(N);
+  if (R.knot) {
+    const lo = Math.max(1, Math.floor(Math.min(...R.X.map((x) => x.s1))) - 6), hi = Math.min(N - 2, Math.ceil(Math.max(...R.X.map((x) => x.s2))) + 6);
+    let cx = 0, cy = 0; for (let i = lo; i <= hi; i++) { cx += P[i][0]; cy += P[i][1]; } cx /= hi - lo + 1; cy /= hi - lo + 1;
+    const s = .42, at = (p) => [.5 + (p[0] - cx) * s, .5 + (p[1] - cy) * s];
+    for (let i = lo; i <= hi; i++) T[i] = at(P[i]);
+    for (let i = 0; i < lo; i++) { const u = i / lo; T[i] = [ends[0][0] + (T[lo][0] - ends[0][0]) * u, ends[0][1] + (T[lo][1] - ends[0][1]) * u]; }
+    for (let i = hi + 1; i < N; i++) { const u = (i - hi) / (N - 1 - hi); T[i] = [T[hi][0] + (ends[1][0] - T[hi][0]) * u, T[hi][1] + (ends[1][1] - T[hi][1]) * u]; }
+  } else {
+    const L = [0]; for (let i = 1; i < N; i++) L.push(L[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+    for (let i = 0; i < N; i++) { const u = L[i] / L[N - 1]; T[i] = [ends[0][0] + (ends[1][0] - ends[0][0]) * u, .5 + Math.sin(u * Math.PI * 9) * .004]; }
+  }
+  pullTarget = T;
+}
+function ropeAt(k) {
+  if (!pullTarget || k <= 0) return R.P;
+  return R.P.map((p, i) => [p[0] + (pullTarget[i][0] - p[0]) * k, p[1] + (pullTarget[i][1] - p[1]) * k]);
+}
+
+// ---------- drawing ----------
+function path(pts, a = 0, b = pts.length - 1) { g.beginPath(); g.moveTo(X(pts[a]), Y(pts[a])); for (let i = a + 1; i <= b; i++) g.lineTo(X(pts[i]), Y(pts[i])); }
+function ropeStroke(pts, a, b, rw, cap, cum) {
+  g.lineJoin = 'round'; g.lineCap = cap;
+  path(pts, a, b); g.strokeStyle = '#5a3218'; g.lineWidth = rw + Math.max(2.5, rw * .22); g.stroke();
+  path(pts, a, b); g.strokeStyle = '#d69a5a'; g.lineWidth = rw; g.stroke();
+  // twisted strands
+  path(pts, a, b); g.strokeStyle = 'rgba(120,64,28,.55)'; g.lineWidth = rw * .86; g.setLineDash([rw * .3, rw * .55]); g.lineDashOffset = -cum[a]; g.stroke(); g.setLineDash([]); g.lineDashOffset = 0;
+  path(pts, a, b); g.strokeStyle = 'rgba(255,235,200,.45)'; g.lineWidth = rw * .22; g.stroke();
+}
+function draw(now) {
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, Hh);
+  const k = G.phase === 'ask' ? 0 : ease(clamp(G.t / 1.5, 0, 1));
+  const pts = ropeAt(k), rw = Math.max(6, W * .026);
+  // wooden table texture
+  g.fillStyle = '#efe0c8'; g.beginPath(); g.roundRect(0, 0, W, Hh, 18); g.fill();
+  g.strokeStyle = 'rgba(160,120,80,.12)'; g.lineWidth = 2;
+  for (let y = 12; y < Hh; y += 22) { g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W * .3, y + 6, W * .6, y - 6, W, y + 3); g.stroke(); }
+  // running length along the rope, so the twist pattern lines up on the over-strand pieces
+  const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(X(pts[i]) - X(pts[i - 1]), Y(pts[i]) - Y(pts[i - 1])));
+  ropeStroke(pts, 0, pts.length - 1, rw, 'round', cum);
+  // over-strands on top: the short piece of rope around each crossing that passes over
+  const fade = R.knot || G.phase === 'ask' ? 1 : clamp(1 - k * 1.6, 0, 1);
+  if (fade > 0) {
+    g.globalAlpha = fade;
+    for (const x of R.X) {
+      const s = x.overFirst ? x.s1 : x.s2, c = Math.round(s), span = 5;
+      ropeStroke(pts, Math.max(0, c - span), Math.min(pts.length - 1, c + span), rw, 'butt', cum);
+    }
+    g.globalAlpha = 1;
+  }
+  // frayed ends + pull arrows
+  for (const [p, d] of [[pts[0], -1], [pts[pts.length - 1], 1]]) {
+    g.fillStyle = '#5a3218'; g.beginPath(); g.arc(X(p), Y(p), rw * .75, 0, 7); g.fill();
+    g.fillStyle = '#e8c08a'; g.beginPath(); g.arc(X(p), Y(p), rw * .45, 0, 7); g.fill();
+    if (G.phase === 'ask') {
+      const wob = Math.sin(now / 250) * rw * .4;
+      g.fillStyle = 'rgba(38,33,58,.55)'; g.font = `700 ${rw * 1.7}px Fredoka, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(d < 0 ? '⟵' : '⟶', X(p) + d * (rw * 2.2 + wob), Y(p) - rw * 1.8);
+    }
+  }
+  // the tightened knot gets a little pulse
+  if (G.phase === 'done' && R.knot) {
+    const p = (Math.sin(now / 200) + 1) / 2;
+    g.strokeStyle = `rgba(192,101,43,${.25 + .25 * p})`; g.lineWidth = 3; g.setLineDash([6, 6]);
+    g.beginPath(); g.arc(W / 2, Y([0, .5]), W * .2, 0, 7); g.stroke(); g.setLineDash([]);
+  }
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  drawFx();
+  if (!R) return;
+  const dt = clamp((now - (frame.last || now)) / 1000, 0, .05); frame.last = now;
+  if (G.phase === 'pull') { G.t += dt; if (G.t >= 1.6) afterPull(); }
+  draw(now);
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+$('bKnot').addEventListener('click', () => answer(true));
+$('bNot').addEventListener('click', () => answer(false));
+$('bAgain').addEventListener('click', () => { G.phase = 'pull'; G.t = 0; sfx.pull(); $('bAgain').hidden = true; setTimeout(() => ($('bAgain').hidden = false), 1700); });
+$('bNext').addEventListener('click', next);
+addEventListener('keydown', (e) => {
+  if (!G) return;
+  if (G.phase === 'ask' && (e.key === 'k' || e.key === 'ArrowLeft')) answer(true);
+  if (G.phase === 'ask' && (e.key === 'n' || e.key === 'ArrowRight')) answer(false);
+  if (G.phase === 'done' && e.key === 'Enter') next();
+});
+$('rNext').addEventListener('click', () => { hide('result'); startLevel(save.current || 1); });
+$('rShare').addEventListener('click', async () => {
+  const d = save.daily[today], marks = d ? d.marks : run.marks;
+  const text = `KNOT OR NOT? Daily #${dailyNo} 🪢\n${marks.map((m) => (m ? '🟩' : '🟥')).join('')}  ${marks.filter(Boolean).length}/5\nbugarcade.github.io/knot-or-not/`;
+  try { if (navigator.share) await navigator.share({ text }); else await navigator.clipboard.writeText(text); } catch {}
+});
+$('bDaily').addEventListener('click', startDaily);
+$('bLevels').addEventListener('click', () => { buildGrid(); show_('levels'); });
+$('lClose').addEventListener('click', () => hide('levels'));
+$('bMute').addEventListener('click', () => { save.mute = !save.mute; persist(); muteIcon(); });
+const muteIcon = () => ($('bMute').textContent = muted() ? '🔇' : '🔊');
+function buildGrid() {
+  const grid = $('grid'); grid.innerHTML = '';
+  const done = Object.values(save.res), right = done.filter(Boolean).length;
+  $('score').textContent = done.length ? `First-try score: ${right} / ${done.length}` : 'Your first answer is the one that counts';
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const b = document.createElement('button'); b.className = 'lv' + (n === save.current ? ' cur' : '');
+    b.disabled = n > save.unlocked;
+    const r = save.res[n];
+    b.innerHTML = `${n > save.unlocked ? '🔒' : n}<small>${r === true ? '✅' : r === false ? '❌' : ''}</small>`;
+    b.addEventListener('click', () => startLevel(n));
+    grid.appendChild(b);
+  }
+}
+function show_(id) { $(id).classList.add('on'); }
+function hide(id) { $(id).classList.remove('on'); }
+
+// ---------- confetti ----------
+const fx = $('fx'), fc = fx.getContext('2d'); let parts = [];
+function confetti() {
+  fx.width = innerWidth; fx.height = innerHeight; const r = cv.getBoundingClientRect();
+  for (let i = 0; i < 90; i++) parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 4, c: ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2'][i % 5], s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+}
+function drawFx() {
+  if (!parts.length) return;
+  fc.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter((p) => p.life < 120);
+  for (const p of parts) { p.vy += .45; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++; fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore(); }
+  if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+}
+
+Portal.ready.then(() => {
+  try { Object.assign(save, JSON.parse(Portal.storage.get('knotornot')) || {}); } catch {}
+  muteIcon();
+  startLevel(Math.min(save.current || 1, save.unlocked));
+  Portal.loaded();
+});
+Portal.onMute((m) => { portalMuted = m; muteIcon(); });
+// test hook: drive frames by hand (rAF pauses in hidden tabs)
+window.__kn = { get G() { return G; }, get R() { return R; }, startLevel, startDaily, answer, next, frame };
+})();
+</script>
+</body>
+</html>
