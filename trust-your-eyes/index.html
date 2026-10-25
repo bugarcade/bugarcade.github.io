@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<title>TRUST YOUR EYES?</title>
+<meta name="description" content="Classic optical illusions with a real answer. Which line is longer? Which circle is bigger? Guess, then watch the illusion fall apart.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #fdf6ec; --ink: #26213a; --muted: #8f86a0; --card: #fffdf8; --line: #eadfce; color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: "Fredoka", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  main { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .bar { width: min(560px, 100%); display: flex; align-items: center; gap: 8px; min-height: 44px; }
+  .bar h1 { font-size: 22px; font-weight: 600; flex: 1; text-align: center; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; background: var(--card); border: 2px solid var(--line); text-decoration: none; color: inherit; }
+  .portal .web-only { visibility: hidden; }
+  #task { font-size: 23px; font-weight: 600; text-align: center; line-height: 1.2; }
+  #task b { color: #e5484d; }
+  #stage { flex: 1; width: 100%; min-height: 0; display: grid; place-items: center; }
+  #scene { display: block; background: #fffdf8; border-radius: 18px; box-shadow: 0 2px 0 var(--line); }
+  #hint { font-size: 16px; color: var(--muted); min-height: 22px; text-align: center; }
+  .controls { display: flex; gap: 10px; width: min(560px, 100%); justify-content: center; min-height: 54px; }
+  .btn { flex: 1; max-width: 200px; padding: 13px 10px; border-radius: 16px; font-size: 19px; font-weight: 600; background: var(--card); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--line); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 4px 0 #120f1c; }
+  .btn.right { background: #34c778; color: #fff; border-color: #34c778; box-shadow: 0 4px 0 #23965a; }
+  .btn.wrong { background: #e5484d; color: #fff; border-color: #e5484d; box-shadow: 0 4px 0 #b3343a; }
+  .btn:disabled { cursor: default; }
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(253, 246, 236, .86); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 16px; z-index: 5; }
+  .overlay.on { display: grid; }
+  .card { width: min(380px, 100%); background: var(--card); border: 2px solid var(--line); border-radius: 24px; padding: 24px 22px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; box-shadow: 0 20px 50px rgba(38, 33, 58, .18); animation: pop .35s cubic-bezier(.2, 1.5, .4, 1); max-height: calc(100vh - 32px); overflow-y: auto; }
+  @keyframes pop { from { transform: scale(.75); opacity: 0; } }
+  .card h2 { font-size: 30px; line-height: 1.1; }
+  .card p { font-size: 17px; color: var(--muted); }
+  .big { font-size: 54px; }
+  .card .btn { width: 100%; max-width: none; }
+  .row { display: flex; gap: 10px; width: 100%; }
+  .grid { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .lv { aspect-ratio: 1; border-radius: 12px; background: #fff; border: 2px solid var(--line); font-size: 17px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .lv small { font-size: 10px; margin-top: 3px; height: 10px; }
+  .lv:disabled { opacity: .35; cursor: default; }
+  .lv.cur { border-color: var(--ink); }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <a class="icon web-only" href="../" aria-label="More games">←</a>
+    <h1 id="title">Level 1</h1>
+    <button class="icon" id="bDaily" aria-label="Daily puzzle">📅</button>
+    <button class="icon" id="bLevels" aria-label="Levels">▦</button>
+    <button class="icon" id="bMute" aria-label="Sound">🔊</button>
+  </div>
+  <div id="task"></div>
+  <div id="stage"><canvas id="scene"></canvas></div>
+  <div id="hint"></div>
+  <div class="controls" id="answers"></div>
+</main>
+
+<div class="overlay" id="result"><div class="card">
+  <h2 id="rTitle">Sharp eyes!</h2>
+  <div class="big" id="rBig">👁️</div>
+  <p id="rText"></p>
+  <button class="btn primary" id="rNext">Next level →</button>
+  <div class="row"><button class="btn" id="rRetry">See it again</button><button class="btn" id="rShare">Share</button></div>
+</div></div>
+<div class="overlay" id="levels"><div class="card">
+  <h2>Levels</h2>
+  <p id="score"></p>
+  <div class="grid" id="grid"></div>
+  <button class="btn" id="lClose">Back</button>
+</div></div>
+<canvas id="fx"></canvas>
+
+<script src="../portal.js?v=2"></script>
+<script src="eyes.js"></script>
+<script>
+(() => {
+'use strict';
+const { level, daily, draw: paint, fooledPick, LEVELS } = window.Eyes;
+const $ = (id) => document.getElementById(id);
+
+// ---------- save: per level, did you get it on the first try ----------
+const save = { unlocked: 1, res: {}, current: 1, mute: false, daily: {} };
+const persist = () => Portal.storage.set('trusteyes', JSON.stringify(save));
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const dailyNo = (() => { const [y, m, d] = today.split('-').map(Number); return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(2026, 9, 26)) / 864e5) + 1; })();
+
+// ---------- sound ----------
+let ac = null, portalMuted = false;
+const muted = () => save.mute || portalMuted;
+function audio() { if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } if (ac && ac.state === 'suspended') ac.resume(); return ac; }
+function tone(f, d, v, type = 'sine', when = 0, slide = 0) {
+  if (muted() || !audio()) return;
+  const t = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, f + slide), t + d);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d + .05);
+}
+const sfx = {
+  pick: () => tone(880, .1, .08, 'triangle'),
+  whoosh: () => { tone(300, .6, .05, 'sawtooth', 0, 500); tone(150, .7, .06, 'sine', .05, 300); },
+  win: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, .4, .12, 'triangle', i * .08)),
+  lose: () => { tone(330, .3, .1, 'triangle', 0, -80); tone(247, .5, .1, 'triangle', .2, -80); },
+};
+
+// ---------- state: look → reveal → done ----------
+let P, G;
+function start(p) {
+  P = p;
+  G = { phase: 'look', pick: null, t: 0, replay: false };
+  if (!P.daily) { save.current = P.n; persist(); }
+  $('title').textContent = P.daily ? `Daily #${dailyNo}` : `Level ${P.n}`;
+  $('task').innerHTML = P.q;
+  $('hint').textContent = !P.daily && P.n <= 2 ? 'Trust your first impression… or don\'t' : '';
+  const box = $('answers'); box.innerHTML = '';
+  P.labels.forEach((lab, i) => {
+    const b = document.createElement('button'); b.className = 'btn'; b.textContent = lab;
+    b.addEventListener('click', () => choose(i)); box.appendChild(b);
+  });
+  hide('result'); hide('levels');
+  resize();
+  Portal.start();
+}
+function choose(i) {
+  if (G.phase !== 'look') return;
+  audio(); sfx.pick(); sfx.whoosh();
+  G.pick = i; G.phase = 'reveal'; G.t = 0;
+  [...$('answers').children].forEach((b, k) => { b.disabled = true; if (k === i) b.classList.add('primary'); });
+  $('hint').textContent = 'Taking the illusion apart…';
+}
+function decide() {
+  G.phase = 'done';
+  const ok = G.pick === P.answer;
+  [...$('answers').children].forEach((b, k) => { b.classList.remove('primary'); if (k === P.answer) b.classList.add('right'); else if (k === G.pick) b.classList.add('wrong'); });
+  if (!G.replay) {
+    if (ok) { sfx.win(); setTimeout(confetti, 100); Portal.happy(); } else sfx.lose();
+    if (P.daily) { if (!save.daily[today]) save.daily[today] = { ok }; }
+    else {
+      if (save.res[P.n] === undefined) save.res[P.n] = ok;
+      if (P.n >= save.unlocked) save.unlocked = Math.min(LEVELS.length, P.n + 1);
+    }
+    persist();
+  }
+  $('hint').textContent = explain();
+  setTimeout(() => {
+    Portal.stop();
+    $('rTitle').textContent = ok ? 'Sharp eyes! 👁️' : 'Your eyes lied 😵';
+    $('rBig').textContent = ok ? '🎯' : '🌀';
+    const fooled = fooledPick(P);
+    $('rText').textContent = explain() + (P.answer !== fooled ? ` Most people say "${P.labels[fooled]}".` : '');
+    $('rNext').textContent = P.daily ? 'Back to levels' : 'Next level →';
+    show('result');
+  }, 1400);
+}
+function explain() {
+  if (P.type === 'parallel') return P.answer === 0 ? 'They are perfectly parallel. The little hatches bend them.' : 'They are not parallel: each one tilts a little.';
+  if (P.answer === P.labels.length - 1) return 'They are exactly the same.';
+  return `${P.labels[P.answer]} really is ${P.type === 'greys' ? 'darker' : 'bigger'}${P.truth === 'hidden' ? ', even though it looks the other way' : ''}.`;
+}
+function replay() { hide('result'); G.phase = 'reveal'; G.t = 0; G.replay = true; Portal.start(); }
+
+// ---------- layout: world is 100 x 126 ----------
+const cv = $('scene'), g = cv.getContext('2d');
+const WH = 126;
+let W = 360, Hh = 450, dpr = 1, S = 3.6;
+function resize() {
+  const r = $('stage').getBoundingClientRect();
+  W = Math.floor(Math.max(240, Math.min(r.width - 8, 560, (r.height - 8) * 100 / WH)));
+  Hh = Math.floor(W * WH / 100); S = W / 100;
+  dpr = Math.min(devicePixelRatio || 1, 3);
+  cv.style.width = W + 'px'; cv.style.height = Hh + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
+}
+addEventListener('resize', resize);
+
+// ---------- loop ----------
+const REVEAL = 2.4;
+function step(dt) {
+  if (G.phase === 'reveal') { G.t += dt / REVEAL; if (G.t >= 1) { G.t = 1; if (!G.replay) decide(); else { G.phase = 'done'; } } }
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  drawFx();
+  if (!P) return;
+  const dt = Math.min(.05, (now - (frame.last || now)) / 1000); frame.last = now;
+  step(dt);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, Hh);
+  paint(g, P, S, 0, 0, G.phase === 'look' ? 0 : G.t);
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+addEventListener('keydown', (e) => {
+  const k = { ArrowLeft: 0, ArrowUp: 0, '1': 0, ArrowRight: 1, ArrowDown: 1, '2': 1, '3': 2, s: 2 }[e.key];
+  if (k !== undefined && G && G.phase === 'look' && k < P.labels.length) choose(k);
+  if ((e.key === 'Enter' || e.code === 'Space') && $('result').classList.contains('on')) $('rNext').click();
+});
+$('rNext').addEventListener('click', () => start(P.daily ? level(save.current) : level(Math.min(LEVELS.length, P.n + 1))));
+$('rRetry').addEventListener('click', replay);
+$('rShare').addEventListener('click', async () => {
+  const head = P.daily ? `TRUST YOUR EYES? Daily #${dailyNo}` : `TRUST YOUR EYES? Level ${P.n}`;
+  const ok = G.pick === P.answer;
+  const text = `${head} 👁️\n${ok ? 'My eyes won ✅' : 'My eyes lied to me ❌'}\nCan you trust yours? bugarcade.github.io/trust-your-eyes/`;
+  try { if (navigator.share) await navigator.share({ text }); else await navigator.clipboard.writeText(text); } catch {}
+});
+$('bDaily').addEventListener('click', () => start(daily(today)));
+$('bLevels').addEventListener('click', () => { buildGrid(); show('levels'); });
+$('lClose').addEventListener('click', () => hide('levels'));
+$('bMute').addEventListener('click', () => { save.mute = !save.mute; persist(); muteIcon(); });
+const muteIcon = () => ($('bMute').textContent = muted() ? '🔇' : '🔊');
+function buildGrid() {
+  const grid = $('grid'); grid.innerHTML = '';
+  const done = Object.values(save.res), right = done.filter(Boolean).length;
+  $('score').textContent = done.length ? `First-try score: ${right} / ${done.length}` : 'Your first guess is the one that counts';
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const b = document.createElement('button'); b.className = 'lv' + (n === save.current ? ' cur' : '');
+    b.disabled = n > save.unlocked;
+    const r = save.res[n];
+    b.innerHTML = `${n > save.unlocked ? '🔒' : n}<small>${r === true ? '✅' : r === false ? '❌' : ''}</small>`;
+    b.addEventListener('click', () => start(level(n)));
+    grid.appendChild(b);
+  }
+}
+function show(id) { $(id).classList.add('on'); }
+function hide(id) { $(id).classList.remove('on'); }
+
+// ---------- confetti ----------
+const fx = $('fx'), fc = fx.getContext('2d'); let parts = [];
+function confetti() {
+  fx.width = innerWidth; fx.height = innerHeight; const r = cv.getBoundingClientRect();
+  for (let i = 0; i < 100; i++) parts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 4, c: ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2'][i % 5], s: 5 + Math.random() * 6, a: Math.random() * 6, life: 0 });
+}
+function drawFx() {
+  if (!parts.length) return;
+  fc.clearRect(0, 0, fx.width, fx.height);
+  parts = parts.filter((p) => p.life < 120);
+  for (const p of parts) { p.vy += .45; p.x += p.vx; p.y += p.vy; p.a += .2; p.life++; fc.save(); fc.translate(p.x, p.y); fc.rotate(p.a); fc.fillStyle = p.c; fc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); fc.restore(); }
+  if (!parts.length) fc.clearRect(0, 0, fx.width, fx.height);
+}
+
+Portal.ready.then(() => {
+  try { Object.assign(save, JSON.parse(Portal.storage.get('trusteyes')) || {}); } catch {}
+  muteIcon();
+  start(level(Math.min(save.current || 1, save.unlocked)));
+  Portal.loaded();
+});
+Portal.onMute((m) => { portalMuted = m; muteIcon(); });
+// test hook: drive frames by hand (rAF pauses in hidden tabs)
+window.__ey = { get G() { return G; }, get P() { return P; }, start, level, daily, frame, choose };
+})();
+</script>
+</body>
+</html>
